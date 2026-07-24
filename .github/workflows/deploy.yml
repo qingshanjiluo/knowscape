@@ -14,7 +14,10 @@ jobs:
           node-version: '20'
       - run: npm ci
       - name: Build frontend
-        run: npm run build
+        run: |
+          cd frontend
+          npm ci
+          npm run build
         env:
           VITE_API_BASE: ${{ secrets.VITE_API_BASE || 'https://knowscape-api.workers.dev' }}
       - name: Deploy API (Workers)
