@@ -286,12 +286,13 @@ app.post(`${API}/auth/login`, async (c) => {
     const token = await sign({ userId: user.id }, JWT_SECRET);
     await c.env.DB.prepare(
       "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, datetime('now', '+7 days'))"
-    ).run(crypto.randomUUID(), user.id, token);
+    ).bind(crypto.randomUUID(), user.id, token).run();
 
     const { password_hash, ...safeUser } = user;
     return ok(c, { token, user: safeUser });
   } catch (e) {
-    return fail(c, e.message, 1, 500);
+    console.error('LOGIN ERROR:', e.message, e.stack);
+    return fail(c, '登录失败: ' + e.message, 1, 500);
   }
 });
 
