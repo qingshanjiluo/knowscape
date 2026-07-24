@@ -149,13 +149,13 @@ async function authMiddleware(c, next) {
     const decoded = await verify(token, JWT_SECRET);
     const session = await c.env.DB.prepare(
       "SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')"
-    ).first(token);
+    ).bind(token).first();
     if (!session) {
       return fail(c, '登录已过期', 1, 401);
     }
     const user = await c.env.DB.prepare(
       'SELECT id, username, email, avatar, bio, is_admin, is_active FROM users WHERE id = ?'
-    ).first(decoded.userId);
+    ).bind(decoded.userId).first();
     if (!user || !user.is_active) {
       return fail(c, '用户不存在或已被禁用', 1, 401);
     }
@@ -178,7 +178,7 @@ async function adminMiddleware(c, next) {
 // ─── 积分工具函数 ───
 
 async function addPoints(DB, userId, amount, type, description) {
-  const points = await DB.prepare('SELECT * FROM user_points WHERE user_id = ?').first(userId);
+  const points = await DB.prepare('SELECT * FROM user_points WHERE user_id = ?').bind(userId).first();
   if (points) {
     await DB.prepare(
       "UPDATE user_points SET balance = balance + ?, total_earned = total_earned + ?, updated_at = datetime('now') WHERE user_id = ?"
@@ -194,7 +194,7 @@ async function addPoints(DB, userId, amount, type, description) {
 }
 
 async function consumePoints(DB, userId, amount, type, description) {
-  const points = await DB.prepare('SELECT * FROM user_points WHERE user_id = ?').first(userId);
+  const points = await DB.prepare('SELECT * FROM user_points WHERE user_id = ?').bind(userId).first();
   if (!points || points.balance < amount) {
     return false;
   }
@@ -210,26 +210,11 @@ async function consumePoints(DB, userId, amount, type, description) {
 // ─── 初始化数据库 ───
 const SCHEMA_STATEMENTS = SCHEMA_SQL.split(';').filter(s => s.trim());
 
-async function initDB(env) {
-  if (!env.DB) return;
-  try {
-    for (const stmt of SCHEMA_STATEMENTS) {
-      try {
-        await env.DB.prepare(stmt).all();
-      } catch (e) {
-        // 表已存在则跳过
-      }
-    }
-  } catch (e) {
-    console.error('DB init error:', e);
-  }
-}
-
-let dbInitialized = false;
 app.use('*', async (c, next) => {
-  if (!dbInitialized && c.env.DB) {
-    await initDB(c.env);
-    dbInitialized = true;
+  if (c.env.DB) {
+    for (const stmt of SCHEMA_STATEMENTS) {
+      try { await c.env.DB.prepare(stmt).all(); } catch (_) {}
+    }
   }
   await next();
 });
@@ -243,11 +228,11 @@ app.post(`${API}/auth/register`, async (c) => {
     const { username, email, password } = await c.req.json();
     if (!username || !password) return fail(c, '用户名和密码必填');
 
-    const existing = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').first(username);
+    const existing = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
     if (existing) return fail(c, '用户名已存在');
 
     if (email) {
-      const existingEmail = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').first(email);
+      const existingEmail = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
       if (existingEmail) return fail(c, '邮箱已被注册');
     }
 
@@ -276,7 +261,7 @@ app.post(`${API}/auth/register`, async (c) => {
 
     const user = await c.env.DB.prepare(
       'SELECT id, username, email, avatar, bio, is_admin FROM users WHERE id = ?'
-    ).first(userId);
+    ).bind(userId).first();
 
     return ok(c, { token, user });
   } catch (e) {
@@ -290,7 +275,7 @@ app.post(`${API}/auth/login`, async (c) => {
     if (!username || !password) return fail(c, '用户名和密码必填');
 
     const JWT_SECRET = c.env.JWT_SECRET || 'knowscape-secret-key-2024';
-    const user = await c.env.DB.prepare('SELECT * FROM users WHERE username = ?').first(username);
+    const user = await c.env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(username).first();
     if (!user) return fail(c, '用户名或密码错误', 1, 401);
 
     const valid = await bcrypt.compare(password, user.password_hash);
@@ -315,10 +300,10 @@ app.get(`${API}/auth/me`, authMiddleware, async (c) => {
     const user = c.get('user');
     const points = await c.env.DB.prepare(
       'SELECT balance, total_earned FROM user_points WHERE user_id = ?'
-    ).first(user.id) || { balance: 0, total_earned: 0 };
+    ).bind(user.id).first() || { balance: 0, total_earned: 0 };
     const membership = await c.env.DB.prepare(
       'SELECT level, expire_at FROM user_membership WHERE user_id = ?'
-    ).first(user.id) || { level: 'free', expire_at: null };
+    ).bind(user.id).first() || { level: 'free', expire_at: null };
     return ok(c, { ...user, points, membership: { ...membership } });
   } catch (e) {
     return fail(c, e.message, 1, 500);
@@ -344,7 +329,7 @@ app.get(`${API}/list-books`, async (c) => {
   try {
     const books = await c.env.DB.prepare('SELECT * FROM books ORDER BY created_at DESC').all();
     const result = await Promise.all(books.results.map(async (b) => {
-      const total = await c.env.DB.prepare('SELECT COUNT(*) as c FROM chapters WHERE book_id = ?').first(b.id);
+      const total = await c.env.DB.prepare('SELECT COUNT(*) as c FROM chapters WHERE book_id = ?').bind(b.id).first();
       const chapters = await c.env.DB.prepare('SELECT distilled_content FROM chapters WHERE book_id = ?').all(b.id);
       let distilledPoints = 0;
       for (const ch of chapters.results) {
@@ -426,7 +411,7 @@ app.delete(`${API}/delete-book`, async (c) => {
 
     // 从 R2 删除文件
     if (c.env.R2) {
-      const book = await c.env.DB.prepare('SELECT file_path FROM books WHERE id = ?').first(book_id);
+      const book = await c.env.DB.prepare('SELECT file_path FROM books WHERE id = ?').bind(book_id).first();
       if (book && book.file_path) {
         try {
           const objects = await c.env.R2.list({ prefix: `books/${book_id}/` });
@@ -456,13 +441,13 @@ app.get(`${API}/get-book`, async (c) => {
     const book_id = c.req.query('book_id');
     if (!book_id) return fail(c, '缺少 book_id');
 
-    const book = await c.env.DB.prepare('SELECT * FROM books WHERE id = ?').first(book_id);
+    const book = await c.env.DB.prepare('SELECT * FROM books WHERE id = ?').bind(book_id).first();
     if (!book) return fail(c, 'Book not found', 1, 404);
 
-    const total = await c.env.DB.prepare('SELECT COUNT(*) as c FROM chapters WHERE book_id = ?').first(book_id);
+    const total = await c.env.DB.prepare('SELECT COUNT(*) as c FROM chapters WHERE book_id = ?').bind(book_id).first();
     const distilled = await c.env.DB.prepare(
       "SELECT COUNT(*) as c FROM chapters WHERE book_id = ? AND distilled_content IS NOT NULL AND distilled_content != '{}'"
-    ).first(book_id);
+    ).bind(book_id).first();
 
     let distilledPoints = 0;
     const chs = await c.env.DB.prepare('SELECT distilled_content FROM chapters WHERE book_id = ?').all(book_id);
@@ -473,10 +458,10 @@ app.get(`${API}/get-book`, async (c) => {
       } catch {}
     }
 
-    const framework = await c.env.DB.prepare('SELECT framework_tree FROM frameworks WHERE book_id = ?').first(book_id);
+    const framework = await c.env.DB.prepare('SELECT framework_tree FROM frameworks WHERE book_id = ?').bind(book_id).first();
     const document = await c.env.DB.prepare(
       'SELECT id, title, created_at FROM documents WHERE book_id = ? ORDER BY created_at DESC LIMIT 1'
-    ).first(book_id);
+    ).bind(book_id).first();
 
     return ok(c, {
       ...book,
@@ -501,7 +486,7 @@ app.get(`${API}/get-chapter`, async (c) => {
   try {
     const book_id = c.req.query('book_id');
     const chapter_index = parseInt(c.req.query('chapter_index'));
-    const ch = await c.env.DB.prepare('SELECT * FROM chapters WHERE book_id = ? AND idx = ?').first(book_id, chapter_index);
+    const ch = await c.env.DB.prepare('SELECT * FROM chapters WHERE book_id = ? AND idx = ?').bind(book_id, chapter_index).first();
     if (!ch) return fail(c, 'Chapter not found', 1, 404);
 
     let distill = { shallow: [], medium: [], deep: [] };
@@ -533,7 +518,7 @@ app.post(`${API}/distill-chapter`, async (c) => {
     const { book_id, chapter_index, depth = 'deep' } = await c.req.json();
     if (!book_id || chapter_index === undefined) return fail(c, '缺少 book_id 或 chapter_index');
 
-    const ch = await c.env.DB.prepare('SELECT * FROM chapters WHERE book_id = ? AND idx = ?').first(book_id, parseInt(chapter_index));
+    const ch = await c.env.DB.prepare('SELECT * FROM chapters WHERE book_id = ? AND idx = ?').bind(book_id, parseInt(chapter_index)).first();
     if (!ch) return fail(c, 'Chapter not found', 1, 404);
 
     const apiKey = c.env.DEEPSEEK_API_KEY;
@@ -589,7 +574,7 @@ ${truncated}
 app.post(`${API}/start-distillation`, async (c) => {
   try {
     const { book_id, depth = 'deep' } = await c.req.json();
-    const book = await c.env.DB.prepare('SELECT * FROM books WHERE id = ?').first(book_id);
+    const book = await c.env.DB.prepare('SELECT * FROM books WHERE id = ?').bind(book_id).first();
     if (!book) return fail(c, 'Book not found', 1, 404);
 
     await c.env.DB.prepare("UPDATE books SET status = 'distilling' WHERE id = ?").run(book_id);
@@ -691,7 +676,7 @@ ${truncated}
 app.get(`${API}/get-distillation-status`, async (c) => {
   try {
     const book_id = c.req.query('book_id');
-    const book = await c.env.DB.prepare('SELECT * FROM books WHERE id = ?').first(book_id);
+    const book = await c.env.DB.prepare('SELECT * FROM books WHERE id = ?').bind(book_id).first();
     if (!book) return fail(c, 'Book not found', 1, 404);
 
     let progressFromKV = null;
@@ -738,14 +723,14 @@ app.get(`${API}/knowledge-map`, async (c) => {
 
     let map = await c.env.DB.prepare(
       'SELECT * FROM knowledge_maps WHERE book_id = ? ORDER BY version DESC LIMIT 1'
-    ).first(book_id);
+    ).bind(book_id).first();
 
     if (!map) {
       // 自动生成知识地图
       const chapters = await c.env.DB.prepare(
         'SELECT idx, title FROM chapters WHERE book_id = ? ORDER BY idx'
       ).all(book_id);
-      const book = await c.env.DB.prepare('SELECT title FROM books WHERE id = ?').first(book_id);
+      const book = await c.env.DB.prepare('SELECT title FROM books WHERE id = ?').bind(book_id).first();
       if (!book) return fail(c, 'Book not found', 1, 404);
 
       const nodes = [
@@ -768,7 +753,7 @@ app.get(`${API}/knowledge-map`, async (c) => {
         'INSERT INTO knowledge_maps (id, book_id, title, layout, nodes_json, edges_json, styles_json) VALUES (?,?,?,?,?,?,?)'
       ).run(mapId, book_id, book.title || '知识地图', 'mindmap', JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({}));
 
-      map = await c.env.DB.prepare('SELECT * FROM knowledge_maps WHERE id = ?').first(mapId);
+      map = await c.env.DB.prepare('SELECT * FROM knowledge_maps WHERE id = ?').bind(mapId).first();
     }
 
     return ok(c, {
@@ -855,7 +840,7 @@ app.post(`${API}/community/resource`, async (c) => {
 
     const resource = await c.env.DB.prepare(
       'SELECT cr.*, u.username as author_name FROM community_resources cr LEFT JOIN users u ON cr.user_id = u.id WHERE cr.id = ?'
-    ).first(id);
+    ).bind(id).first();
 
     return ok(c, resource, '发布成功');
   } catch (e) {
@@ -880,7 +865,7 @@ app.post(`${API}/community/resources/:id/like`, async (c) => {
 
     const existing = await c.env.DB.prepare(
       'SELECT id FROM community_likes WHERE user_id = ? AND resource_id = ?'
-    ).first(userId, resourceId);
+    ).bind(userId, resourceId).first();
 
     if (existing) {
       await c.env.DB.prepare('DELETE FROM community_likes WHERE id = ?').run(existing.id);
@@ -924,12 +909,12 @@ app.post(`${API}/points/signin`, authMiddleware, async (c) => {
     const today = new Date().toISOString().split('T')[0];
     const existing = await c.env.DB.prepare(
       "SELECT id FROM point_transactions WHERE user_id = ? AND type = 'signin' AND date(created_at) = ?"
-    ).first(c.get('user').id, today);
+    ).bind(c.get('user').id, today).first();
 
     if (existing) return fail(c, '今日已签到');
 
     await addPoints(c.env.DB, c.get('user').id, 5, 'signin', '每日签到 +5');
-    const points = await c.env.DB.prepare('SELECT balance FROM user_points WHERE user_id = ?').first(c.get('user').id);
+    const points = await c.env.DB.prepare('SELECT balance FROM user_points WHERE user_id = ?').bind(c.get('user').id).first();
 
     return ok(c, { success: true, balance: points?.balance || 0 });
   } catch (e) {
@@ -941,7 +926,7 @@ app.get(`${API}/points/balance`, authMiddleware, async (c) => {
   try {
     const points = await c.env.DB.prepare(
       'SELECT balance, total_earned FROM user_points WHERE user_id = ?'
-    ).first(c.get('user').id) || { balance: 0, total_earned: 0 };
+    ).bind(c.get('user').id).first() || { balance: 0, total_earned: 0 };
     return ok(c, points);
   } catch (e) {
     return fail(c, e.message, 1, 500);
@@ -967,7 +952,7 @@ app.post(`${API}/points/consume`, authMiddleware, async (c) => {
     const success = await consumePoints(c.env.DB, c.get('user').id, amount, 'consume', description || '消耗积分');
     if (!success) return fail(c, '积分不足');
 
-    const points = await c.env.DB.prepare('SELECT balance FROM user_points WHERE user_id = ?').first(c.get('user').id);
+    const points = await c.env.DB.prepare('SELECT balance FROM user_points WHERE user_id = ?').bind(c.get('user').id).first();
     return ok(c, { success: true, balance: points?.balance || 0 });
   } catch (e) {
     return fail(c, e.message, 1, 500);
@@ -993,7 +978,7 @@ app.get(`${API}/subscription/status`, authMiddleware, async (c) => {
   try {
     const sub = await c.env.DB.prepare(
       "SELECT * FROM subscriptions WHERE user_id = ? AND status = 'active'"
-    ).first(c.get('user').id);
+    ).bind(c.get('user').id).first();
 
     if (!sub || (sub.expire_at && new Date(sub.expire_at) < new Date())) {
       return ok(c, { plan: 'free', status: 'expired', benefits: SUBSCRIPTION_PLANS.basic });
@@ -1306,7 +1291,7 @@ app.post(`${API}/checkin`, async (c) => {
     const today = now.split('T')[0];
     const existing = await c.env.DB.prepare(
       "SELECT id FROM checkins WHERE user_id = 'default' AND date(created_at) = ?"
-    ).first(today);
+    ).bind(today).first();
 
     if (existing) return ok(c, { success: true, message: '今日已签到' });
 
