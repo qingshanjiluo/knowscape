@@ -69,6 +69,20 @@ CREATE TABLE IF NOT EXISTS user_points (
   total_earned INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS agent_conversations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT DEFAULT '新对话',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS agent_messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS point_transactions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -1306,6 +1320,64 @@ app.post(`${API}/checkin`, async (c) => {
 
 app.get(`${API}/health`, async (c) => {
   return ok(c, { status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ─── Agent 对话 ───
+
+app.get(`${API}/agent/conversations`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const rows = await c.env.DB.prepare(
+      "SELECT * FROM agent_conversations WHERE user_id = ? ORDER BY updated_at DESC"
+    ).bind(user.id).all();
+    return ok(c, rows.results || []);
+  } catch (e) {
+    return fail(c, e.message);
+  }
+});
+
+app.get(`${API}/agent/conversations/:id/messages`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const convId = c.req.param('id');
+    const conv = await c.env.DB.prepare(
+      "SELECT * FROM agent_conversations WHERE id = ? AND user_id = ?"
+    ).bind(convId, user.id).first();
+    if (!conv) return fail(c, '对话不存在', 1, 404);
+    const msgs = await c.env.DB.prepare(
+      "SELECT * FROM agent_messages WHERE conversation_id = ? ORDER BY created_at"
+    ).bind(convId).all();
+    return ok(c, msgs.results || []);
+  } catch (e) {
+    return fail(c, e.message);
+  }
+});
+
+app.post(`${API}/agent/conversations`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { title } = await c.req.json();
+    const id = crypto.randomUUID();
+    await c.env.DB.prepare(
+      "INSERT INTO agent_conversations (id, user_id, title) VALUES (?, ?, ?)"
+    ).bind(id, user.id, title || '新对话').run();
+    return ok(c, { id, title: title || '新对话' });
+  } catch (e) {
+    return fail(c, e.message);
+  }
+});
+
+app.delete(`${API}/agent/conversations/:id`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const convId = c.req.param('id');
+    await c.env.DB.prepare(
+      "DELETE FROM agent_conversations WHERE id = ? AND user_id = ?"
+    ).bind(convId, user.id).run();
+    return ok(c, null, '已删除');
+  } catch (e) {
+    return fail(c, e.message);
+  }
 });
 
 // ─── 导出 ───
