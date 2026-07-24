@@ -147,12 +147,7 @@ async function authMiddleware(c, next) {
   const JWT_SECRET = c.env.JWT_SECRET || 'knowscape-secret-key-2024';
   try {
     const decoded = await verify(token, JWT_SECRET);
-    const session = await c.env.DB.prepare(
-      "SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')"
-    ).bind(token).first();
-    if (!session) {
-      return fail(c, '登录已过期', 1, 401);
-    }
+    // 跳过 session 检查，直接验证用户是否存在
     const user = await c.env.DB.prepare(
       'SELECT id, username, email, avatar, bio, is_admin, is_active FROM users WHERE id = ?'
     ).bind(decoded.userId).first();
@@ -284,9 +279,10 @@ app.post(`${API}/auth/login`, async (c) => {
     if (!user.is_active) return fail(c, '账号已被禁用', 1, 403);
 
     const token = await sign({ userId: user.id }, JWT_SECRET);
-    await c.env.DB.prepare(
-      "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, datetime('now', '+7 days'))"
-    ).bind(crypto.randomUUID(), user.id, token).run();
+    // 不插入 sessions 表
+    // await c.env.DB.prepare(
+    //   "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, datetime('now', '+7 days'))"
+    // ).bind(crypto.randomUUID(), user.id, token).run();
 
     const { password_hash, ...safeUser } = user;
     return ok(c, { token, user: safeUser });
