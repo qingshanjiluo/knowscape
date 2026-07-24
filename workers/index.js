@@ -1,8 +1,18 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { jwt, sign, verify } from 'hono/jwt';
 import bcrypt from 'bcryptjs';
 
 const app = new Hono();
+
+// ─── CORS ───
+app.use('*', cors({
+  origin: ['https://knowscape.pages.dev', 'https://*.knowscape.pages.dev', 'http://localhost:3000', 'http://localhost:5173'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
+
 const API = '/api/v1';
 
 // ─── 响应帮助函数 ───
