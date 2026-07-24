@@ -8,14 +8,6 @@ binding = "DB"
 database_name = "knowscape-db"
 database_id = "6e0bb22d-1a1d-4b5b-a647-f2306e991baf"
 
-# [[r2_buckets]]
-# binding = "R2"
-# bucket_name = "knowscape-assets"
-
-# [[kv_namespaces]]
-# binding = "KV"
-# id = "314b9cce50942088e5874253d931800"
-
 [vars]
-JWT_SECRET = "from-github-secret"
-DEEPSEEK_API_KEY = "from-github-secret"
+JWT_SECRET = "knowscape-jwt-secret-2026"
+DEEPSEEK_API_KEY = "sk-placeholder-replace-me"
