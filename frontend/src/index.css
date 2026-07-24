@@ -1,0 +1,314 @@
+@import "tailwindcss";
+
+/* ─── 知境（KnowScape）Design Tokens ─── */
+
+@theme {
+  /* Color Palette - Light Theme (极昼) */
+  --color-ks-bg: #FAFAF8;
+  --color-ks-card: #FFFFFF;
+  --color-ks-sidebar: #F3F2EF;
+  --color-ks-border: #E8E6E3;
+  --color-ks-primary: #4A6FA5;
+  --color-ks-primary-hover: #3A5A8A;
+  --color-ks-primary-active: #2E4A72;
+  --color-ks-secondary: #6B8FBF;
+  --color-ks-accent: #D97757;
+  --color-ks-success: #7D9B6D;
+  --color-ks-error: #C2453D;
+  --color-ks-warning: #E0A83E;
+  --color-ks-success-dark: #5B8C5A;
+  --color-ks-text: #2C2825;
+  --color-ks-text-secondary: #6B6560;
+  --color-ks-text-muted: #999490;
+  --color-ks-text-disabled: #C4C0BC;
+  --color-ks-shadow: rgba(44, 40, 37, 0.08);
+  --color-ks-hover: rgba(74, 111, 165, 0.06);
+
+  /* Distill Category Colors */
+  --color-ks-cat-method: #4A6FA5;
+  --color-ks-cat-principle: #7D9B6D;
+  --color-ks-cat-strategy: #B88D5E;
+  --color-ks-cat-model: #8A75B5;
+  --color-ks-cat-case: #C2806A;
+  --color-ks-cat-data: #5A8F8A;
+  --color-ks-cat-perspective: #B57A8A;
+
+  /* Typography */
+  --font-family-ks-heading: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-family-ks-body: 'Lora', 'Noto Serif SC', Georgia, 'Source Han Serif SC', serif;
+  --font-family-ks-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Source Code Pro', monospace;
+
+  /* Spacing */
+  --spacing-ks-xs: 2px;
+  --spacing-ks-sm: 4px;
+  --spacing-ks-md: 8px;
+  --spacing-ks-lg: 12px;
+  --spacing-ks-xl: 16px;
+  --spacing-ks-2xl: 20px;
+  --spacing-ks-3xl: 24px;
+  --spacing-ks-4xl: 32px;
+  --spacing-ks-5xl: 48px;
+  --spacing-ks-6xl: 64px;
+
+  /* Border Radius */
+  --radius-ks-sm: 4px;
+  --radius-ks-md: 8px;
+  --radius-ks-lg: 12px;
+  --radius-ks-xl: 16px;
+  --radius-ks-full: 999px;
+}
+
+/* ─── Base Styles ─── */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family-ks-body);
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--color-ks-text);
+  background: var(--color-ks-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar ─── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-ks-border);
+  border-radius: var(--radius-ks-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ks-text-muted);
+}
+
+/* ─── Markdown Content ─── */
+
+.ks-prose h1,
+.ks-prose h2,
+.ks-prose h3,
+.ks-prose h4 {
+  font-family: var(--font-family-ks-heading);
+  font-weight: 600;
+  color: var(--color-ks-text);
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.ks-prose h1 { font-size: 1.75rem; line-height: 1.4; }
+.ks-prose h2 { font-size: 1.35rem; line-height: 1.45; }
+.ks-prose h3 { font-size: 1.15rem; line-height: 1.5; }
+.ks-prose h4 { font-size: 1rem; line-height: 1.55; }
+
+.ks-prose p {
+  margin-bottom: 1em;
+}
+
+.ks-prose blockquote {
+  border-left: 3px solid var(--color-ks-accent);
+  padding-left: 16px;
+  margin: 16px 0;
+  color: var(--color-ks-text-secondary);
+  font-style: italic;
+}
+
+.ks-prose code {
+  font-family: var(--font-family-ks-mono);
+  background: var(--color-ks-sidebar);
+  padding: 2px 6px;
+  border-radius: var(--radius-ks-sm);
+  font-size: 0.88em;
+}
+
+.ks-prose pre {
+  background: var(--color-ks-sidebar);
+  border: 1px solid var(--color-ks-border);
+  border-radius: var(--radius-ks-md);
+  padding: 16px;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.ks-prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.88em;
+}
+
+.ks-prose ul, .ks-prose ol {
+  padding-left: 1.5em;
+  margin: 12px 0;
+}
+
+.ks-prose li {
+  margin-bottom: 4px;
+}
+
+.ks-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.ks-prose th, .ks-prose td {
+  border: 1px solid var(--color-ks-border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.ks-prose th {
+  background: var(--color-ks-sidebar);
+  font-family: var(--font-family-ks-heading);
+  font-weight: 600;
+}
+
+/* ─── Animations ─── */
+
+@keyframes ks-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes ks-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ks-slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ks-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes ks-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ks-animate-pulse { animation: ks-pulse 2s ease-in-out infinite; }
+.ks-animate-spin { animation: ks-spin 1s linear infinite; }
+.ks-animate-slide-down { animation: ks-slide-down 0.2s ease-out; }
+.ks-animate-slide-up { animation: ks-slide-up 0.25s ease-out; }
+.ks-animate-fade-in { animation: ks-fade-in 0.2s ease-out; }
+
+/* ─── Bookshelf Simulation ─── */
+
+@keyframes ks-shelf-hover {
+  from { transform: translateY(0); }
+  to { transform: translateY(-8px); }
+}
+
+@keyframes ks-spine-pulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(44, 40, 37, 0.15); }
+  50% { box-shadow: 0 4px 16px rgba(44, 40, 37, 0.25); }
+}
+
+/* Shelf plank wood grain texture */
+.ks-shelf-plank {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 8px,
+      rgba(139, 115, 85, 0.08) 8px,
+      rgba(139, 115, 85, 0.08) 9px
+    ),
+    linear-gradient(180deg, #9B8B70 0%, #8B7B60 30%, #7A6A50 60%, #6B5B45 100%);
+  position: relative;
+}
+
+.ks-shelf-plank::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(180deg, #5A4A35 0%, #4A3A25 100%);
+  border-radius: 0 0 2px 2px;
+}
+
+/* Book spine 3D effect */
+.ks-book-spine {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.ks-book-spine:hover {
+  transform: translateY(-8px);
+  z-index: 10;
+}
+
+/* Book spine left ridge highlight */
+.ks-book-spine::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.1) 100%);
+  border-radius: 2px 0 0 2px;
+}
+
+/* Book spine right shadow */
+.ks-book-spine::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 4px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.15) 100%);
+  border-radius: 0 2px 2px 0;
+}
+
+/* Shelf back panel */
+.ks-shelf-back {
+  background: linear-gradient(180deg, #E8E0D4 0%, #DDD5C8 50%, #D2CAB8 100%);
+  box-shadow: inset 0 2px 8px rgba(44, 40, 37, 0.08);
+}
+
+/* Workspace transitions */
+.ks-workspace-transition {
+  transition: width 200ms ease-out, opacity 200ms ease-out;
+}
+
+/* ─── Cornell Layout Helpers ─── */
+
+.ks-cornell-left {
+  background: var(--color-ks-sidebar);
+  border-right: 1px solid var(--color-ks-border);
+}
+
+.ks-cornell-center {
+  background: var(--color-ks-bg);
+}
+
+.ks-cornell-right {
+  background: var(--color-ks-card);
+  border-left: 1px solid var(--color-ks-border);
+}

@@ -1,0 +1,24 @@
+name = "knowscape-api"
+main = "workers/index.js"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "knowscape-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "knowscape-assets"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+[vars]
+JWT_SECRET = "your-jwt-secret-here"
+DEEPSEEK_API_KEY = "your-deepseek-api-key-here"
+
+[site]
+bucket = "./public"
