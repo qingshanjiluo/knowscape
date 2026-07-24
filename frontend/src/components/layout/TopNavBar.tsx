@@ -9,6 +9,8 @@ import {
   LogIn,
   LogOut,
   Shield,
+  Bot,
+  Network,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';

@@ -22,7 +22,7 @@ import { useBookStore } from '@/stores/bookStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ToastContainer } from '@/components/ui';
 import { SettingsPanel } from '@/components/settings';
-import { Search } from 'lucide-react';
+import { Search, BookOpen, Layers, Sparkles } from 'lucide-react';
 import KnowledgeMap from '@/components/mindmap/KnowledgeMap';
 import AIUsageStats from '@/components/ai/AIUsageStats';
 
@@ -279,8 +279,8 @@ function OnboardingOverlay() {
 }
 
 function AppShell() {
-  const { loadBooks, selectedBookId } = useBookStore();
-  const { chatOpen, rightPanel, setRightPanel } = useUIStore();
+  const { loadBooks } = useBookStore();
+  const { chatOpen } = useUIStore();
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
