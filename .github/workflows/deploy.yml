@@ -25,10 +25,18 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: deploy --var JWT_SECRET:${{ secrets.JWT_SECRET }} --var DEEPSEEK_API_KEY:${{ secrets.DEEPSEEK_API_KEY }}
+          command: deploy
+          secrets: |
+            JWT_SECRET
+            DEEPSEEK_API_KEY
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       - name: Deploy Frontend (Pages)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy frontend/dist --project-name=knowscape
+          command: pages deploy frontend/dist --project-name=knowscape --branch=main
