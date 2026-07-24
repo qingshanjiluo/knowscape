@@ -14,11 +14,8 @@ bucket_name = "knowscape-assets"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "314b9ccec50942088e5874253d931800"
+id = "314b9cce50942088e5874253d931800"
 
 [vars]
-JWT_SECRET = "your-jwt-secret-here"
-DEEPSEEK_API_KEY = "your-deepseek-api-key-here"
-
-[site]
-bucket = "./public"
+JWT_SECRET = "from-github-secret"
+DEEPSEEK_API_KEY = "from-github-secret"

@@ -8,8 +8,7 @@ import {
   User,
   LogIn,
   LogOut,
-  Bot,
-  Network,
+  Shield,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -214,6 +213,19 @@ export default function TopNavBar() {
           className="w-px h-4 mx-1.5"
           style={{ backgroundColor: 'var(--color-ks-border)' }}
         />
+
+        {user?.is_admin && (
+          <NavLink
+            to="/admin"
+            className="flex items-center h-8 px-2 rounded-lg text-[11px] font-medium transition-colors no-underline cursor-pointer"
+            style={({ isActive }) => ({
+              color: isActive ? 'var(--color-ks-primary)' : 'var(--color-ks-text-muted)',
+              backgroundColor: isActive ? 'var(--color-ks-hover)' : 'transparent',
+            })}
+          >
+            <Shield size={13} />
+          </NavLink>
+        )}
 
         {/* User: logged in -> avatar, not logged in -> login */}
         {user ? (

@@ -17,6 +17,7 @@ import HomePage from '@/pages/HomePage';
 import ProfilePage from '@/pages/ProfilePage';
 import CommunityPage from '@/pages/CommunityPage';
 import LoginPage from '@/pages/LoginPage';
+import AdminPage from '@/pages/AdminPage';
 import { useBookStore } from '@/stores/bookStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ToastContainer } from '@/components/ui';
@@ -317,6 +318,7 @@ function AppShell() {
             <Route path="/community" element={<FullWidthLayout><CommunityPage /></FullWidthLayout>} />
             <Route path="/profile" element={<FullWidthLayout><ProfilePage /></FullWidthLayout>} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/admin" element={<FullWidthLayout><AdminPage /></FullWidthLayout>} />
           </Routes>
         </div>
         {chatOpen && <ChatPanel />}

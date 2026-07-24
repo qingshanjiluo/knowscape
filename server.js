@@ -634,44 +634,16 @@ function stripHtml(html) {
 }
 
 const API = '/api/v1';
-const SETTINGS_PATH = path.join(__dirname, 'settings.json');
 const distillProgress = new Map();
 
-function readSettings() {
-  try {
-    if (fs.existsSync(SETTINGS_PATH)) {
-      return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
-    }
-  } catch {}
+/** 从环境变量读取 LLM 配置（settings.json 已由 Workers 管理） */
+function getLlmConfig(_agentName) {
   return {
-    providers: {
-      deepseek: { name: 'DeepSeek', base_url: 'https://api.deepseek.com', api_key: process.env.DEEPSEEK_API_KEY || '', model: 'deepseek-chat', temperature: 0.7, max_tokens: 4096 },
-      openai: { name: 'OpenAI', base_url: 'https://api.openai.com/v1', api_key: '', model: 'gpt-4o', temperature: 0.7, max_tokens: 4096 },
-    },
-    default_provider: 'deepseek',
-    agents: { distill: 'deepseek', chat: 'deepseek', rag: 'deepseek', generate: 'deepseek' },
-  };
-}
-
-function getLlmConfig(agentName) {
-  const settings = readSettings();
-  const providerKey = settings.agents?.[agentName] || settings.default_provider || 'deepseek';
-  const provider = settings.providers?.[providerKey];
-  if (!provider) {
-    return {
-      api_key: process.env.DEEPSEEK_API_KEY,
-      base_url: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
-      model: process.env.DEFAULT_MODEL || 'deepseek-chat',
-      temperature: 0.7,
-      max_tokens: 4096,
-    };
-  }
-  return {
-    api_key: provider.api_key || process.env.DEEPSEEK_API_KEY,
-    base_url: provider.base_url || 'https://api.deepseek.com',
-    model: provider.model || 'deepseek-chat',
-    temperature: provider.temperature ?? 0.7,
-    max_tokens: provider.max_tokens ?? 4096,
+    api_key: process.env.DEEPSEEK_API_KEY,
+    base_url: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+    model: process.env.DEFAULT_MODEL || 'deepseek-chat',
+    temperature: 0.7,
+    max_tokens: 4096,
   };
 }
 
@@ -2256,84 +2228,7 @@ app.get(`${API}/get-graph-data`, (req, res) => {
   }
 });
 
-app.get(`${API}/settings`, (req, res) => {
-  try {
-    const settings = readSettings();
-    const providersArr = Object.entries(settings.providers || {}).map(([k, v]) => ({
-      id: k,
-      name: v.name || k,
-      base_url: v.base_url || '',
-      api_key: v.api_key ? v.api_key.slice(0, 8) + '****' : '',
-      model: v.model || '',
-      temperature: v.temperature ?? 0.7,
-      max_tokens: v.max_tokens ?? 4096,
-    }));
-    res.json({
-      providers: providersArr,
-      default_provider_id: settings.default_provider || '',
-      agent_mappings: settings.agents || { distill: '', chat: '', rag: '', generate: '' },
-    });
-  } catch (e) {
-    res.status(500).json({ detail: e.message });
-  }
-});
-
-app.post(`${API}/settings`, (req, res) => {
-  try {
-    const { providers, default_provider_id, agent_mappings } = req.body;
-    if (!providers || !Array.isArray(providers)) {
-      return res.status(400).json({ detail: '无效的设置格式' });
-    }
-    const existing = readSettings();
-    const providersObj = {};
-    for (const p of providers) {
-      const key = p.id || `provider-${Date.now()}`;
-      let apiKey = p.api_key || '';
-      if (apiKey.includes('****')) {
-        apiKey = existing.providers?.[key]?.api_key || apiKey;
-      }
-      providersObj[key] = {
-        name: p.name || key,
-        base_url: p.base_url || '',
-        api_key: apiKey,
-        model: p.model || '',
-        temperature: p.temperature ?? 0.7,
-        max_tokens: p.max_tokens ?? 4096,
-      };
-    }
-    const out = {
-      providers: providersObj,
-      default_provider: default_provider_id || Object.keys(providersObj)[0] || '',
-      agents: agent_mappings || { distill: '', chat: '', rag: '', generate: '' },
-    };
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(out, null, 2), 'utf-8');
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ detail: e.message });
-  }
-});
-
-app.post(`${API}/settings/test-connection`, async (req, res) => {
-  try {
-    const { base_url, api_key, model } = req.body;
-    if (!api_key) return res.status(400).json({ success: false, message: '缺少 api_key' });
-
-    const resp = await fetch(`${base_url.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api_key}` },
-      body: JSON.stringify({ model: model || 'deepseek-chat', messages: [{ role: 'user', content: 'Hi' }], max_tokens: 5 }),
-    });
-
-    if (resp.ok) {
-      res.json({ success: true, message: '连接成功' });
-    } else {
-      const err = await resp.text();
-      res.json({ success: false, message: `连接失败: ${resp.status} ${err}` });
-    }
-  } catch (e) {
-    res.json({ success: false, message: `连接失败: ${e.message}` });
-  }
-});
+// settings 路由已迁移至 Workers — settings.json 由 Workers 管理
 
 app.get(`${API}/distill-progress`, (req, res) => {
   const { book_id } = req.query;
@@ -4111,6 +4006,8 @@ app.get(`${API}/admin/orders`, authMiddleware, (req, res) => {
   const orders = db.prepare('SELECT o.*, u.username FROM orders o LEFT JOIN users u ON o.user_id = u.id ORDER BY o.created_at DESC LIMIT 100').all();
   res.json(orders);
 });
+
+// admin/llm-config 路由已迁移至 Workers — settings.json 由 Workers 管理
 
 app.post(`${API}/reading/start`, authMiddleware, (req, res) => {
   const { book_id } = req.body;
