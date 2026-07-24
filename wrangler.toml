@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "knowscape-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "6e0bb22d-1a1d-4b5b-a647-f2306e991baf"
 
 [[r2_buckets]]
 binding = "R2"
@@ -14,7 +14,7 @@ bucket_name = "knowscape-assets"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "YOUR_KV_NAMESPACE_ID"
+id = "314b9ccec50942088e5874253d931800"
 
 [vars]
 JWT_SECRET = "your-jwt-secret-here"
