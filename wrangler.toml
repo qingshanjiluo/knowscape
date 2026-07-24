@@ -8,9 +8,9 @@ binding = "DB"
 database_name = "knowscape-db"
 database_id = "6e0bb22d-1a1d-4b5b-a647-f2306e991baf"
 
-[[r2_buckets]]
-binding = "R2"
-bucket_name = "knowscape-assets"
+# [[r2_buckets]]
+# binding = "R2"
+# bucket_name = "knowscape-assets"
 
 [[kv_namespaces]]
 binding = "KV"
