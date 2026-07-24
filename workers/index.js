@@ -208,15 +208,28 @@ async function consumePoints(DB, userId, amount, type, description) {
 }
 
 // ─── 初始化数据库 ───
+const SCHEMA_STATEMENTS = SCHEMA_SQL.split(';').filter(s => s.trim());
 
-app.use('*', async (c, next) => {
-  // 在每个请求开始时确保表存在
-  if (c.env.DB) {
-    try {
-      await c.env.DB.exec(SCHEMA_SQL);
-    } catch (e) {
-      // 如果表已存在则忽略
+async function initDB(env) {
+  if (!env.DB) return;
+  try {
+    for (const stmt of SCHEMA_STATEMENTS) {
+      try {
+        await env.DB.prepare(stmt).all();
+      } catch (e) {
+        // 表已存在则跳过
+      }
     }
+  } catch (e) {
+    console.error('DB init error:', e);
+  }
+}
+
+let dbInitialized = false;
+app.use('*', async (c, next) => {
+  if (!dbInitialized && c.env.DB) {
+    await initDB(c.env);
+    dbInitialized = true;
   }
   await next();
 });
