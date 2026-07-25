@@ -163,6 +163,17 @@ CREATE TABLE IF NOT EXISTS redeemed_codes (
   user_id TEXT NOT NULL,
   redeemed_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS redeem_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  plan TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  contact TEXT,
+  admin_id TEXT,
+  approved_at TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS system_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
@@ -1580,6 +1591,113 @@ app.post(`${API}/redeem`, authMiddleware, async (c) => {
     await c.env.DB.prepare('INSERT INTO redeemed_codes (id, code_id, user_id) VALUES (?, ?, ?)').bind(crypto.randomUUID(), rc.id, user.id).run();
     await c.env.DB.prepare('UPDATE redeem_codes SET uses_left = uses_left - 1 WHERE id = ?').bind(rc.id).run();
     return ok(c, { points: rc.points }, `成功兑换 ${rc.points} 积分`);
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 用户：套餐兑换请求 ───
+app.post(`${API}/redeem-plan`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { plan, contact } = await c.req.json();
+    if (!plan) return fail(c, '请选择要兑换的套餐');
+    const validPlans = ['basic', 'standard', 'premium', 'flagship'];
+    if (!validPlans.includes(plan)) return fail(c, '无效套餐');
+
+    // Check if user already has a pending request
+    const pending = await c.env.DB.prepare(
+      "SELECT id FROM redeem_requests WHERE user_id = ? AND status = 'pending'"
+    ).bind(user.id).first();
+    if (pending) return fail(c, '你已有一个待审批的兑换请求，请等待管理员处理');
+
+    const id = crypto.randomUUID();
+    await c.env.DB.prepare(
+      "INSERT INTO redeem_requests (id, user_id, username, plan, contact) VALUES (?, ?, ?, ?, ?)"
+    ).bind(id, user.id, user.username || '未知', plan, contact || '').run();
+    return ok(c, { id }, '兑换请求已提交，等待管理员审核');
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 管理员：获取兑换请求列表 ───
+app.get(`${API}/admin/redeem-requests`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const status = c.req.query('status') || 'pending';
+    const requests = await c.env.DB.prepare(
+      "SELECT * FROM redeem_requests WHERE status = ? ORDER BY created_at DESC LIMIT 100"
+    ).bind(status).all();
+    return ok(c, requests.results);
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 管理员：审批兑换请求（一键绑定套餐 + 积分） ───
+app.post(`${API}/admin/redeem-requests/:id/approve`, authMiddleware, async (c) => {
+  try {
+    const admin = c.get('user');
+    if (!admin.is_admin) return fail(c, '无权限', 1, 403);
+    const reqId = c.req.param('id');
+    const request = await c.env.DB.prepare(
+      "SELECT * FROM redeem_requests WHERE id = ? AND status = 'pending'"
+    ).bind(reqId).first();
+    if (!request) return fail(c, '兑换请求不存在或已处理');
+
+    const plan = request.plan;
+    const userId = request.user_id;
+
+    // Subscription storage caps per plan
+    const caps = {
+      basic: { perm: 104857600, shelf: 20 },
+      standard: { perm: 209715200, shelf: 50 },
+      premium: { perm: 524288000, shelf: 100 },
+      flagship: { perm: 1073741824, shelf: 9999 }
+    };
+    const cap = caps[plan] || { perm: 20971520, shelf: 5 };
+
+    // Bind subscription (upsert)
+    const existing = await c.env.DB.prepare(
+      "SELECT id, plan FROM subscriptions WHERE user_id = ? AND status = 'active'"
+    ).bind(userId).first();
+    if (existing) {
+      await c.env.DB.prepare(
+        "UPDATE subscriptions SET plan = ?, updated_at = datetime('now'), expire_at = datetime('now', '+30 days') WHERE user_id = ? AND status = 'active'"
+      ).bind(plan, userId).run();
+    } else {
+      await c.env.DB.prepare(
+        "INSERT INTO subscriptions (id, user_id, plan, status, expire_at) VALUES (?, ?, ?, 'active', datetime('now', '+30 days'))"
+      ).bind(crypto.randomUUID(), userId, plan).run();
+    }
+
+    // Update user_storage caps
+    const st = await c.env.DB.prepare('SELECT * FROM user_storage WHERE user_id = ?').bind(userId).first();
+    if (st) {
+      await c.env.DB.prepare(
+        'UPDATE user_storage SET permanent_bytes = ?, shelf_capacity = ? WHERE user_id = ?'
+      ).bind(cap.perm, cap.shelf, userId).run();
+    } else {
+      await c.env.DB.prepare(
+        'INSERT INTO user_storage (user_id, permanent_bytes, shelf_capacity) VALUES (?, ?, ?)'
+      ).bind(userId, cap.perm, cap.shelf).run();
+    }
+
+    // Bonus points based on plan
+    const bonusPoints = { basic: 300, standard: 800, premium: 1500, flagship: 3000 };
+    const points = bonusPoints[plan] || 0;
+    if (points > 0) {
+      const p = await c.env.DB.prepare('SELECT id FROM user_points WHERE user_id = ?').bind(userId).first();
+      if (p) {
+        await c.env.DB.prepare('UPDATE user_points SET balance = balance + ?, total_earned = total_earned + ? WHERE user_id = ?').bind(points, points, userId).run();
+      } else {
+        await c.env.DB.prepare('INSERT INTO user_points (id, user_id, balance, total_earned) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), userId, points, points).run();
+      }
+      await c.env.DB.prepare('INSERT INTO point_transactions (id, user_id, amount, type, description) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), userId, points, 'redeem_plan', `套餐 ${plan} 兑换赠送 ${points} 积分`).run();
+    }
+
+    // Mark request as approved
+    await c.env.DB.prepare(
+      "UPDATE redeem_requests SET status = 'approved', admin_id = ?, approved_at = datetime('now') WHERE id = ?"
+    ).bind(admin.id, reqId).run();
+
+    return ok(c, { plan, points }, `已批准 ${request.username || userId} 的 ${plan} 套餐兑换请求`);
   } catch (e) { return fail(c, e.message); }
 });
 

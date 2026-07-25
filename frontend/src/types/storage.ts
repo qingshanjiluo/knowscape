@@ -111,3 +111,95 @@ export function getExpiryWarningLevel(daysLeft: number): 'critical' | 'warning' 
   if (daysLeft <= 3) return 'warning';
   return 'normal';
 }
+
+// ─── 套餐兑换请求 ───
+export type RedeemRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RedeemRequest {
+  id: string;
+  user_id: string;
+  username: string;
+  plan: SubscriptionTier;
+  status: RedeemRequestStatus;
+  contact: string;
+  admin_id?: string;
+  approved_at?: string;
+  created_at: string;
+}
+
+export interface RedeemRequestResponse {
+  id: string;
+  plan: string;
+  points: number;
+}
+
+// ─── 套餐显示配置 ───
+export interface PlanConfig {
+  key: SubscriptionTier;
+  label: string;
+  price: number;
+  monthlyPoints: number;
+  ebookQuota: number;
+  features: string[];
+  color: string;
+  gradient: string;
+  badge: string;
+}
+
+export const PLAN_CONFIGS: PlanConfig[] = [
+  {
+    key: 'free',
+    label: '免费',
+    price: 0,
+    monthlyPoints: 0,
+    ebookQuota: 2,
+    features: ['基础模型', '社区资源', '每日签到'],
+    color: '#6b7280',
+    gradient: 'from-gray-400 to-gray-500',
+    badge: '当前',
+  },
+  {
+    key: 'basic',
+    label: '基础',
+    price: 29,
+    monthlyPoints: 300,
+    ebookQuota: 10,
+    features: ['去广告', '青铜头衔', '加速队列'],
+    color: '#8b5cf6',
+    gradient: 'from-purple-400 to-purple-500',
+    badge: 'HOT',
+  },
+  {
+    key: 'standard',
+    label: '标准',
+    price: 59,
+    monthlyPoints: 800,
+    ebookQuota: 30,
+    features: ['加速队列', '高级模型', '白银头衔', '优先客服'],
+    color: '#3b82f6',
+    gradient: 'from-blue-400 to-blue-500',
+    badge: '推荐',
+  },
+  {
+    key: 'premium',
+    label: '高级',
+    price: 89,
+    monthlyPoints: 1500,
+    ebookQuota: 50,
+    features: ['VIP队列', '高级模型', '黄金头衔', '优先客服', '私有知识库'],
+    color: '#f59e0b',
+    gradient: 'from-amber-400 to-orange-500',
+    badge: '畅销',
+  },
+  {
+    key: 'flagship',
+    label: '旗舰',
+    price: 199,
+    monthlyPoints: 3000,
+    ebookQuota: 100,
+    features: ['无限队列', '高级模型', '黑金头衔', '专属客服', '私有知识库', '5人团队协作'],
+    color: '#ef4444',
+    gradient: 'from-red-400 to-red-500',
+    badge: '至尊',
+  },
+];

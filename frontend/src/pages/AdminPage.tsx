@@ -6,9 +6,12 @@ import {
   Ticket, Copy, Check,
   Settings, Eye, EyeOff,
   Award, Star, MessageCircle, ThumbsUp, Upload, BookOpen,
+  CheckCircle2, AlertCircle, Crown, HardDrive,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui';
+import { PLAN_CONFIGS, SUBSCRIPTION_LABELS } from '@/types/storage';
+import type { SubscriptionTier, RedeemRequest } from '@/types/storage';
 
 interface LLMProvider {
   id: string;
@@ -95,6 +98,12 @@ export default function AdminPage() {
   const [pointsSaving, setPointsSaving] = useState(false);
   const [pointsMessage, setPointsMessage] = useState('');
 
+  // Redeem request state
+  const [redeemRequests, setRedeemRequests] = useState<RedeemRequest[]>([]);
+  const [redeemRequestsLoading, setRedeemRequestsLoading] = useState(false);
+  const [redeemRequestsMessage, setRedeemRequestsMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user || !user.is_admin) {
       navigate('/');
@@ -103,6 +112,7 @@ export default function AdminPage() {
     loadConfig();
     loadUsers();
     loadRedeemCodes();
+    loadRedeemRequests();
     loadSystemSettings();
     loadPointsConfig();
   }, [user, navigate]);
@@ -289,6 +299,49 @@ export default function AdminPage() {
       document.body.removeChild(ta);
       setCopiedCode(code);
       setTimeout(() => setCopiedCode(null), 2000);
+    }
+  };
+
+  // ─── 兑换请求管理 ───
+
+  const loadRedeemRequests = async (status = 'pending') => {
+    setRedeemRequestsLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const resp = await fetch(`/api/v1/admin/redeem-requests?status=${status}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setRedeemRequests(data.data || data || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRedeemRequestsLoading(false);
+    }
+  };
+
+  const approveRedeemRequest = async (reqId: string) => {
+    setApprovingId(reqId);
+    setRedeemRequestsMessage(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const resp = await fetch(`/api/v1/admin/redeem-requests/${reqId}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setRedeemRequestsMessage({ ok: true, text: data.message || '已批准' });
+        loadRedeemRequests();
+      } else {
+        setRedeemRequestsMessage({ ok: false, text: data.message || '审批失败' });
+      }
+    } catch {
+      setRedeemRequestsMessage({ ok: false, text: '网络错误' });
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -827,6 +880,91 @@ export default function AdminPage() {
         {redeemMessage && (
           <div className="mt-3 text-xs" style={{ color: redeemMessage.startsWith('✅') ? 'var(--color-ks-success)' : 'var(--color-ks-error)' }}>
             {redeemMessage}
+          </div>
+        )}
+      </section>
+
+      {/* ─── 兑换请求管理 ─── */}
+      <section className="rounded-xl p-5 mb-6" style={sectionCardStyle}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold" style={sectionTitleStyle}>
+            <span className="flex items-center gap-2">
+              <Crown size={14} style={{ color: 'var(--color-ks-primary)' }} />
+              套餐兑换请求
+            </span>
+          </h2>
+          <button
+            onClick={() => loadRedeemRequests()}
+            className="p-1.5 rounded cursor-pointer hover:opacity-70"
+            style={{ color: 'var(--color-ks-text-muted)' }}
+            title="刷新"
+          >
+            <RefreshCw size={14} className={redeemRequestsLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {redeemRequestsLoading && redeemRequests.length === 0 ? (
+          <div className="flex justify-center py-6" style={{ color: 'var(--color-ks-text-muted)' }}>
+            <RefreshCw size={16} className="animate-spin" />
+          </div>
+        ) : redeemRequests.length === 0 ? (
+          <div className="text-xs py-4 text-center" style={{ color: 'var(--color-ks-text-muted)' }}>
+            暂无待处理的兑换请求
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs" style={{ color: 'var(--color-ks-text)' }}>
+              <thead>
+                <tr style={{ color: 'var(--color-ks-text-muted)', borderBottom: '1px solid var(--color-ks-border)' }}>
+                  <th className="text-left py-2 pr-3 font-medium">用户</th>
+                  <th className="text-left py-2 pr-3 font-medium">套餐</th>
+                  <th className="text-left py-2 pr-3 font-medium">联系方式</th>
+                  <th className="text-left py-2 pr-3 font-medium">申请时间</th>
+                  <th className="text-right py-2 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {redeemRequests.map((req) => {
+                  const planCfg = PLAN_CONFIGS.find((p) => p.key === req.plan);
+                  return (
+                    <tr key={req.id} style={{ borderBottom: '1px solid var(--color-ks-border)' }}>
+                      <td className="py-2.5 pr-3 font-medium">{req.username || req.user_id.slice(0, 8)}</td>
+                      <td className="py-2.5 pr-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: planCfg ? `${planCfg.color}22` : 'var(--color-ks-bg)', color: planCfg?.color || 'var(--color-ks-text)' }}>
+                          <Crown size={10} />
+                          {SUBSCRIPTION_LABELS[req.plan] || req.plan}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-3" style={{ color: 'var(--color-ks-text-secondary)' }}>{req.contact || '—'}</td>
+                      <td className="py-2.5 pr-3" style={{ color: 'var(--color-ks-text-secondary)' }}>
+                        {new Date(req.created_at).toLocaleString('zh-CN')}
+                      </td>
+                      <td className="py-2.5 text-right">
+                        <button
+                          onClick={() => approveRedeemRequest(req.id)}
+                          disabled={approvingId === req.id}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium cursor-pointer disabled:opacity-50 transition-all"
+                          style={{ backgroundColor: '#10b981', color: 'white', border: 'none' }}
+                        >
+                          {approvingId === req.id ? (
+                            <><RefreshCw size={10} className="animate-spin" /> 审批中...</>
+                          ) : (
+                            <><CheckCircle2 size={10} /> 一键批准</>
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {redeemRequestsMessage && (
+          <div className="mt-3 flex items-center gap-1.5 text-xs" style={{ color: redeemRequestsMessage.ok ? 'var(--color-ks-success)' : 'var(--color-ks-error)' }}>
+            {redeemRequestsMessage.ok ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+            {redeemRequestsMessage.text}
           </div>
         )}
       </section>
