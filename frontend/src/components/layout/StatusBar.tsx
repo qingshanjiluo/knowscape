@@ -1,9 +1,14 @@
-import { Settings } from 'lucide-react';
+import { Settings, HardDrive } from 'lucide-react';
 import { useBookStore } from '@/stores/bookStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useStorageStore } from '@/stores/storageStore';
+import { formatBytes } from '@/types/storage';
 import ProgressBar from '@/components/ui/ProgressBar';
+import { StorageUpgradeDialog } from '@/components/storage';
+import { useState } from 'react';
 
 export default function StatusBar() {
+  const [showStorageDialog, setShowStorageDialog] = useState(false);
   const books = useBookStore((s) => s.books);
   const selectedBookId = useBookStore((s) => s.selectedBookId);
   const logs = useBookStore((s) => s.logs);
@@ -13,6 +18,10 @@ export default function StatusBar() {
   const isDistilling = selectedBook?.status === 'distilling';
   const progressPercent = selectedBook?.progress.percent ?? 0;
   const currentMessage = selectedBook?.progress.message ?? '';
+
+  const summary = useStorageStore((s) => s.getSummary());
+  const storagePct = summary.totalPermanent > 0 ? Math.round((summary.permanentUsed / summary.totalPermanent) * 100) : 0;
+  const isStorageWarning = storagePct >= 80;
 
   const phaseLabels: Record<string, string> = {
     parsing: '解析中',
@@ -29,6 +38,7 @@ export default function StatusBar() {
     : '';
 
   return (
+    <>
     <footer
       className="flex items-center h-9 px-3 shrink-0 select-none"
       style={{
@@ -88,8 +98,22 @@ export default function StatusBar() {
         )}
       </div>
 
-      {/* Right: Log count + Settings */}
+      {/* Right: Storage + Log count + Settings */}
       <div className="flex items-center gap-3 shrink-0 ml-auto">
+        <button
+          onClick={() => setShowStorageDialog(true)}
+          className="flex items-center gap-1.5 text-[11px] tabular-nums font-[var(--font-family-ks-heading)] cursor-pointer hover:opacity-80 transition-opacity"
+          style={{ color: isStorageWarning ? 'var(--color-ks-warning)' : 'var(--color-ks-text-muted)' }}
+          title={`永久存储: ${formatBytes(summary.permanentUsed)} / ${formatBytes(summary.totalPermanent)} | 短期存储: ${summary.shortTermCount} 本`}
+        >
+          <HardDrive size={11} />
+          <span>{formatBytes(summary.permanentUsed)}/{formatBytes(summary.totalPermanent)}</span>
+          {summary.shortTermCount > 0 && (
+            <span className="text-[10px]" style={{ color: 'var(--color-ks-text-disabled)' }}>
+              +{summary.shortTermCount}
+            </span>
+          )}
+        </button>
         {logs.length > 0 && (
           <span
             className="text-[11px] tabular-nums font-[var(--font-family-ks-heading)]"
@@ -108,5 +132,10 @@ export default function StatusBar() {
         </button>
       </div>
     </footer>
+      <StorageUpgradeDialog
+        open={showStorageDialog}
+        onClose={() => setShowStorageDialog(false)}
+      />
+    </>
   );
 }

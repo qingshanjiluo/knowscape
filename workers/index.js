@@ -168,6 +168,23 @@ CREATE TABLE IF NOT EXISTS system_settings (
   value TEXT NOT NULL,
   updated_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS user_storage (
+  user_id TEXT PRIMARY KEY,
+  permanent_bytes INTEGER DEFAULT 20971520,
+  used_bytes INTEGER DEFAULT 0,
+  shelf_capacity INTEGER DEFAULT 5,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS shelf_books (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  book_id TEXT UNIQUE NOT NULL,
+  storage_type TEXT DEFAULT 'permanent',
+  added_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT,
+  size_bytes INTEGER DEFAULT 0
+);
 `;
 
 // ─── 中间件 ───
@@ -1595,3 +1612,80 @@ app.post(`${API}/user/subscribe`, authMiddleware, async (c) => {
 // ─── 导出 ───
 
 export default app;
+
+// ─── 存储与书架系统 ───
+
+// 获取存储状态
+app.get(`${API}/user/storage`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    let st = await c.env.DB.prepare('SELECT * FROM user_storage WHERE user_id = ?').bind(user.id).first();
+    if (!st) {
+      const sub = await c.env.DB.prepare("SELECT plan FROM subscriptions WHERE user_id = ? AND status = 'active' AND (expires_at IS NULL OR expires_at > datetime('now'))").bind(user.id).first();
+      const subPlan = sub?.plan || 'free';
+      const caps = { basic: { perm: 104857600, shelf: 20 }, standard: { perm: 209715200, shelf: 50 }, premium: { perm: 524288000, shelf: 100 }, flagship: { perm: 1073741824, shelf: 9999 } };
+      const cap = caps[subPlan] || { perm: 20971520, shelf: 5 };
+      await c.env.DB.prepare('INSERT INTO user_storage (user_id, permanent_bytes, shelf_capacity) VALUES (?, ?, ?)').bind(user.id, cap.perm, cap.shelf).run();
+      st = await c.env.DB.prepare('SELECT * FROM user_storage WHERE user_id = ?').bind(user.id).first();
+    }
+    const shelfBooks = await c.env.DB.prepare("SELECT sb.*, b.title, b.author, b.file_type FROM shelf_books sb LEFT JOIN books b ON sb.book_id = b.id WHERE sb.user_id = ? ORDER BY sb.added_at DESC").bind(user.id).all();
+    const now = new Date().toISOString();
+    const shortTermBooks = (shelfBooks.results || []).filter(b => b.storage_type === 'short_term' && b.expires_at);
+    return ok(c, {
+      permanent_bytes: st.permanent_bytes || 20971520,
+      used_bytes: st.used_bytes || 0,
+      shelf_capacity: st.shelf_capacity || 5,
+      shelf_used: (shelfBooks.results || []).length,
+      short_term_count: shortTermBooks.length,
+      books: (shelfBooks.results || []).map(b => ({
+        ...b, expires_in_days: b.expires_at ? Math.max(0, Math.floor((new Date(b.expires_at).getTime() - Date.now()) / 86400000)) : null
+      }))
+    });
+  } catch (e) { return fail(c, e.message); }
+});
+
+// 积分扩容永久存储：50积分 = 20MB
+app.post(`${API}/user/storage/expand`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { points = 50 } = await c.req.json();
+    const extraBytes = Math.floor(points / 50) * 20971520;
+    if (extraBytes <= 0) return fail(c, '至少需要50积分');
+    const up = await c.env.DB.prepare('SELECT balance FROM user_points WHERE user_id = ?').bind(user.id).first();
+    if (!up || up.balance < points) return fail(c, '积分不足');
+    await c.env.DB.prepare('UPDATE user_points SET balance = balance - ? WHERE user_id = ?').bind(points, user.id).run();
+    await c.env.DB.prepare('UPDATE user_storage SET permanent_bytes = permanent_bytes + ?, used_bytes = used_bytes + 0 WHERE user_id = ?').bind(extraBytes, user.id).run();
+    const st = await c.env.DB.prepare('SELECT permanent_bytes FROM user_storage WHERE user_id = ?').bind(user.id).first();
+    return ok(c, { permanent_bytes: st.permanent_bytes, expanded: extraBytes }, `扩容成功，永久存储增加 ${extraBytes / 1048576}MB`);
+  } catch (e) { return fail(c, e.message); }
+});
+
+// 积分扩容书架：20积分 = 1位置
+app.post(`${API}/user/shelf/expand`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { points = 20 } = await c.req.json();
+    const extraSlots = Math.floor(points / 20);
+    if (extraSlots <= 0) return fail(c, '至少需要20积分');
+    const up = await c.env.DB.prepare('SELECT balance FROM user_points WHERE user_id = ?').bind(user.id).first();
+    if (!up || up.balance < points) return fail(c, '积分不足');
+    await c.env.DB.prepare('UPDATE user_points SET balance = balance - ? WHERE user_id = ?').bind(points, user.id).run();
+    await c.env.DB.prepare('UPDATE user_storage SET shelf_capacity = shelf_capacity + ? WHERE user_id = ?').bind(extraSlots, user.id).run();
+    return ok(c, { extra_slots: extraSlots }, `书架扩容 ${extraSlots} 个位置`);
+  } catch (e) { return fail(c, e.message); }
+});
+
+// 延长短期存储：10积分 = 7天
+app.post(`${API}/user/storage/extend`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { book_id } = await c.req.json();
+    const sb = await c.env.DB.prepare("SELECT * FROM shelf_books WHERE book_id = ? AND user_id = ? AND storage_type = 'short_term'").bind(book_id, user.id).first();
+    if (!sb) return fail(c, '书籍不在短期存储中');
+    const up = await c.env.DB.prepare('SELECT balance FROM user_points WHERE user_id = ?').bind(user.id).first();
+    if (!up || up.balance < 10) return fail(c, '需要10积分');
+    await c.env.DB.prepare('UPDATE user_points SET balance = balance - 10 WHERE user_id = ?').bind(user.id).run();
+    await c.env.DB.prepare("UPDATE shelf_books SET expires_at = datetime(expires_at, '+7 days') WHERE id = ?").bind(sb.id).run();
+    return ok(c, null, '短期存储已延长7天');
+  } catch (e) { return fail(c, e.message); }
+});

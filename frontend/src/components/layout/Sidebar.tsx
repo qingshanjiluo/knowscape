@@ -15,11 +15,13 @@ import {
   GripHorizontal,
   Wrench,
   BarChart3,
+  HardDrive,
 } from 'lucide-react';
 import { useBookStore } from '@/stores/bookStore';
 import { useUIStore } from '@/stores/uiStore';
 import type { BookStatus } from '@/types';
 import ProgressRing from '@/components/ui/ProgressRing';
+import { StorageIndicator, ShelfCapacity, StorageUpgradeDialog } from '@/components/storage';
 
 const STATUS_ICONS: Record<BookStatus, { icon: typeof CheckCircle2; color: string }> = {
   idle: { icon: BookOpen, color: 'var(--color-ks-text-muted)' },
@@ -52,6 +54,7 @@ export default function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredBookId, setHoveredBookId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showStorageDialog, setShowStorageDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [chatInput, setChatInput] = useState('');
@@ -218,6 +221,7 @@ export default function Sidebar() {
   }, [splitRatio]);
 
   return (
+    <>
     <aside
       ref={sidebarRef}
       className="flex flex-col h-full select-none overflow-hidden w-full"
@@ -348,6 +352,12 @@ export default function Sidebar() {
                   <div className="text-xs font-semibold" style={{ color: 'var(--color-ks-error)' }}>{books.length - distilledCount}</div>
                 </div>
               </div>
+            </div>
+
+            {/* Storage & Shelf */}
+            <div className="border-t" style={{ borderColor: 'var(--color-ks-border)' }}>
+              <StorageIndicator />
+              <ShelfCapacity onUpgrade={() => setShowStorageDialog(true)} />
             </div>
           </div>
 
@@ -511,5 +521,11 @@ export default function Sidebar() {
         onChange={handleFileChange}
       />
     </aside>
+
+      <StorageUpgradeDialog
+        open={showStorageDialog}
+        onClose={() => setShowStorageDialog(false)}
+      />
+    </>
   );
 }

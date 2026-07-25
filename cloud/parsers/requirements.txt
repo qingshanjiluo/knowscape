@@ -1,0 +1,23 @@
+# Core parsing dependencies
+ebooklib>=0.18
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# PDF parsing
+PyMuPDF>=1.24
+
+# OCR
+pytesseract>=0.3
+Pillow>=10.0
+
+# DOCX parsing
+python-docx>=1.1
+
+# HTTP for URL fetching
+requests>=2.31
+
+# All platform: Windows/macOS/Linux
+# System dependencies (not pip):
+#   - Tesseract OCR: https://github.com/tesseract-ocr/tesseract
+#   - Calibre: https://calibre-ebook.com (for MOBI/AZW)
+#   - Pandoc: https://pandoc.org (for LaTeX)

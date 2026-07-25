@@ -63,6 +63,10 @@ export interface BookInfo {
   stats: BookStats;
   createdAt: string;
   updatedAt: string;
+  // 存储相关
+  fileSizeBytes?: number;
+  storageType?: 'permanent' | 'short-term';
+  expiresAt?: string;
 }
 
 // ─── 章节相关 ───

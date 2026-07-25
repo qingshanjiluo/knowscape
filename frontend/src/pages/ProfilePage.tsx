@@ -18,6 +18,8 @@ import {
   Share2,
   Calendar,
   X,
+  HardDrive,
+  Plus,
 } from 'lucide-react';
 import { useBookStore } from '@/stores/bookStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -112,6 +114,11 @@ export default function ProfilePage() {
   const [checkedToday, setCheckedToday] = useState(false);
   const [weekDays, setWeekDays] = useState(() => buildWeekDaysWithCheckins([]));
 
+  // ── Storage state ──
+  const [storage, setStorage] = useState({
+    permanent_bytes: 20971520, used_bytes: 0, shelf_capacity: 5, shelf_used: 0, books: []
+  });
+
   const handleCheckin = useCallback(async () => {
     try {
       await fetch('/api/v1/checkin', { method: 'POST' });
@@ -166,6 +173,14 @@ export default function ProfilePage() {
       })
       .catch(() => {});
   }, [checkedToday]);
+
+  // 加载存储信息
+  useEffect(() => {
+    fetch('/api/v1/user/storage', { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } })
+      .then(r => r.json())
+      .then(d => { if (d.data) setStorage(d.data); })
+      .catch(() => {});
+  }, []);
 
   const handleSaveProfile = async (data: { username: string; bio: string; email: string; avatar: string }) => {
     try {
@@ -434,6 +449,113 @@ export default function ProfilePage() {
                 </strong>{' '}
                 天
               </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ 存储与书架 ═══ */}
+        <section
+          className="p-6 rounded-[var(--radius-ks-lg)]"
+          style={{
+            backgroundColor: 'var(--color-ks-card)',
+            border: '1px solid var(--color-ks-border)',
+            boxShadow: '0 1px 3px var(--color-ks-shadow)',
+          }}
+        >
+          <h2
+            className="text-base font-semibold mb-4"
+            style={{
+              fontFamily: 'var(--font-family-ks-heading)',
+              color: 'var(--color-ks-text)',
+            }}
+          >
+            <HardDrive size={16} className="inline-block mr-1.5 -mt-0.5" style={{ color: 'var(--color-ks-primary)' }} />
+            存储与书架
+          </h2>
+
+          {/* 永久存储 */}
+          <div className="mb-4 p-4 rounded-[var(--radius-ks-md)]" style={{ backgroundColor: 'var(--color-ks-bg)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium" style={{ color: 'var(--color-ks-text)' }}>永久存储</span>
+              <span className="text-xs tabular-nums" style={{ color: 'var(--color-ks-text-muted)' }}>
+                {formatBytes(storage.used_bytes)} / {formatBytes(storage.permanent_bytes)}
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-ks-border)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(100, (storage.used_bytes / Math.max(1, storage.permanent_bytes)) * 100)}%`,
+                  backgroundColor: storage.used_bytes > storage.permanent_bytes * 0.9
+                    ? 'var(--color-ks-error)' : storage.used_bytes > storage.permanent_bytes * 0.7
+                      ? 'var(--color-ks-warning)' : 'var(--color-ks-primary)',
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={() => {/* open expansion modal */}}
+                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded-[var(--radius-ks-sm)] cursor-pointer"
+                style={{
+                  backgroundColor: 'transparent',
+                  color: 'var(--color-ks-primary)',
+                  border: '1px solid var(--color-ks-primary)',
+                }}
+              >
+                <Plus size={10} />扩容（50积分/20MB）
+              </button>
+            </div>
+          </div>
+
+          {/* 短期存储书籍 */}
+          {storage.books?.filter(b => b.storage_type === 'short_term').length > 0 && (
+            <div className="mb-4">
+              <span className="text-xs font-medium mb-2 block" style={{ color: 'var(--color-ks-text-secondary)' }}>短期存储</span>
+              <div className="flex flex-col gap-2">
+                {storage.books.filter(b => b.storage_type === 'short_term').slice(0, 5).map(book => (
+                  <div key={book.id} className="flex items-center justify-between p-2 rounded-[var(--radius-ks-sm)]" style={{ backgroundColor: 'var(--color-ks-bg)' }}>
+                    <span className="text-xs truncate flex-1" style={{ color: 'var(--color-ks-text)' }}>{book.title || '未知'}</span>
+                    <span className="text-[10px] tabular-nums shrink-0 ml-2" style={{
+                      color: book.expires_in_days <= 1 ? 'var(--color-ks-error)' : 'var(--color-ks-text-muted)'
+                    }}>
+                      ⏳{book.expires_in_days}天
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 书架容量 */}
+          <div className="p-4 rounded-[var(--radius-ks-md)]" style={{ backgroundColor: 'var(--color-ks-bg)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium" style={{ color: 'var(--color-ks-text)' }}>书架容量</span>
+              <span className="text-xs tabular-nums" style={{ color: 'var(--color-ks-text-muted)' }}>
+                {storage.shelf_used || 0} / {storage.shelf_capacity || 5} 本
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-ks-border)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(100, ((storage.shelf_used || 0) / Math.max(1, storage.shelf_capacity || 5)) * 100)}%`,
+                  backgroundColor: (storage.shelf_used || 0) >= (storage.shelf_capacity || 5)
+                    ? 'var(--color-ks-error)' : 'var(--color-ks-success)',
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={() => {/* open shelf expansion */}}
+                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded-[var(--radius-ks-sm)] cursor-pointer"
+                style={{
+                  backgroundColor: 'transparent',
+                  color: 'var(--color-ks-primary)',
+                  border: '1px solid var(--color-ks-primary)',
+                }}
+              >
+                <Plus size={10} />扩容书架（20积分/位置）
+              </button>
             </div>
           </div>
         </section>

@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/knowscape-parser",
+]
+exclude = ["src-tauri"]
+resolver = "2"

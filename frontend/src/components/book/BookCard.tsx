@@ -1,6 +1,10 @@
-import { Trash2 } from 'lucide-react';
+import { Trash2, Clock } from 'lucide-react';
 import type { BookInfo, BookStatus } from '@/types';
 import { ProgressRing, Badge } from '@/components/ui';
+import { ExpiryBadge } from '@/components/storage';
+import { calcDaysLeft } from '@/types/storage';
+import { useState } from 'react';
+import { StorageUpgradeDialog } from '@/components/storage';
 
 interface BookCardProps {
   book: BookInfo;
@@ -30,6 +34,10 @@ export default function BookCard({ book, onSelect, onDelete }: BookCardProps) {
   const statusCfg = STATUS_CONFIG[book.status];
   const formatLabel = FORMAT_LABELS[book.sourceFormat ?? ''] ?? (book.sourceFormat || '未知').toUpperCase();
   const isProcessing = book.status === 'importing' || book.status === 'parsing' || book.status === 'distilling';
+  const [showStorageDialog, setShowStorageDialog] = useState(false);
+
+  const isShortTerm = book.storageType === 'short-term';
+  const daysLeft = book.expiresAt ? calcDaysLeft(book.expiresAt) : 7;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -132,8 +140,25 @@ export default function BookCard({ book, onSelect, onDelete }: BookCardProps) {
           }}
         >
           <span>{book.stats.totalChapters} 章</span>
-          <span>{book.stats.distilledPoints} 论点</span>
+          <div className="flex items-center gap-2">
+            {isShortTerm && book.expiresAt && (
+              <ExpiryBadge
+                expiresAt={book.expiresAt}
+                onExtend={() => setShowStorageDialog(true)}
+              />
+            )}
+            <span>{book.stats.distilledPoints} 论点</span>
+          </div>
         </div>
+
+        {/* Storage upgrade dialog */}
+        {isShortTerm && (
+          <StorageUpgradeDialog
+            open={showStorageDialog}
+            onClose={() => setShowStorageDialog(false)}
+            bookId={book.id}
+          />
+        )}
       </div>
 
       {/* Processing shimmer overlay */}

@@ -1,0 +1,57 @@
+[package]
+name = "knowscape-parser"
+version = "0.1.0"
+edition = "2021"
+description = "Document parsing engine for KnowScape — supports EPUB, PDF, MOBI, AZW, LaTeX, DOCX, Markdown, HTML"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["fs", "io-util", "process"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "2"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# EPUB: read EPUB archives
+epub = "2"
+
+# PDF: extract text
+lopdf = "0.44"
+pdf-extract = "0.12"
+
+# DOCX: read Word documents
+docx-rust = "0.1"
+
+# Markdown: parse and validate
+pulldown-cmark = "0.11"
+
+# HTML: parse and extract content
+scraper = "0.27"
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+# Text processing
+regex = "1"
+unicode-normalization = "0.1"
+encoding_rs = "0.8"
+
+# Temp files for OCR pipeline
+tempfile = "3"
+
+# UUID for document IDs
+uuid = { version = "1", features = ["v4"] }
+
+# SHA256 for content dedup
+sha2 = "0.10"
+hex = "0.4"
+
+[dev-dependencies]
+env_logger = "0.11"
+tokio-test = "0.4"

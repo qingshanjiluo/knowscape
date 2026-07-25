@@ -1,0 +1,19 @@
+{
+  "providers": {
+    "provider-1784774585383-g0sljo": {
+      "name": "mimo",
+      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+      "api_key": "tp-c4w4og0egk4hqvpj70rlaeo5tnn78mn51kqz5apqegyjoj20",
+      "model": "mimo-v2.5",
+      "temperature": 1,
+      "max_tokens": 4096
+    }
+  },
+  "default_provider": "provider-1784774585383-g0sljo",
+  "agents": {
+    "distill": "",
+    "chat": "",
+    "rag": "",
+    "generate": ""
+  }
+}

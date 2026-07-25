@@ -1,0 +1,49 @@
+[llm]
+default_provider = "deepseek"
+
+[llm.providers.deepseek]
+api_key = ""
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+timeout_seconds = 60
+max_retries = 3
+temperature = 0.7
+max_tokens = 4096
+
+[llm.providers.ollama]
+base_url = "http://localhost:11434"
+model = "qwen2.5:14b"
+timeout_seconds = 120
+max_retries = 2
+temperature = 0.7
+max_tokens = 4096
+
+[llm.providers.openai]
+api_key = ""
+base_url = "https://api.openai.com/v1"
+model = "gpt-4o"
+timeout_seconds = 60
+max_retries = 3
+temperature = 0.7
+max_tokens = 4096
+
+[llm.agents]
+distill = "deepseek"
+rag = "deepseek"
+chat = "deepseek"
+generate = "deepseek"
+
+[embedding]
+provider = "http"
+base_url = "http://localhost:8001"
+dimension = 1024
+
+[database]
+path = "knowscape.db"
+
+[distill]
+max_concurrent = 3
+default_depth = "medium"
+
+[log]
+level = "info"

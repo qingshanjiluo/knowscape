@@ -1,0 +1,7 @@
+# 知境 · 知识存储模块依赖
+pydantic>=2.0
+fastapi>=0.115
+uvicorn>=0.30
+langchain-core>=0.3
+sentence-transformers>=2.2
+# asyncpg  # optional, for PostgreSQL backend
