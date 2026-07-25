@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { jwt, sign, verify } from 'hono/jwt';
+import { sign, verify } from 'hono/jwt';
 import bcrypt from 'bcryptjs';
 
 const app = new Hono();
@@ -22,6 +22,34 @@ function ok(c, data = null, message = 'success') {
 
 function fail(c, message = 'error', code = 1, status = 400) {
   return c.json({ code, message, data: null }, status);
+}
+
+// ─── 将 snake_case 对象转为 camelCase ───
+function toCamelCase(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(toCamelCase);
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    result[camelKey] = (value !== null && typeof value === 'object' && !(value instanceof Date))
+      ? toCamelCase(value) : value;
+  }
+  return result;
+}
+
+// ─── JWT 密钥 ───
+function getJwtSecret(c) {
+  return c.env.JWT_SECRET;
+}
+
+// ─── 尝试从请求中提取用户（不阻塞） ───
+async function tryGetUserId(c) {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  try {
+    const decoded = await verify(authHeader.split(' ')[1], getJwtSecret(c));
+    return decoded.userId || null;
+  } catch { return null; }
 }
 
 // ─── 表名映射（在 D1 中初始化） ───
@@ -73,6 +101,7 @@ CREATE TABLE IF NOT EXISTS agent_conversations (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   title TEXT DEFAULT '新对话',
+  book_id TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -120,6 +149,16 @@ CREATE TABLE IF NOT EXISTS community_likes (
   resource_id TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(user_id, resource_id)
+);
+CREATE TABLE IF NOT EXISTS community_co_reading (
+  id TEXT PRIMARY KEY,
+  book_id TEXT NOT NULL,
+  book_title TEXT NOT NULL,
+  book_author TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  reader_count INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'active',
+  created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS checkins (
   id TEXT PRIMARY KEY, user_id TEXT DEFAULT 'default', created_at TEXT
@@ -207,9 +246,8 @@ async function authMiddleware(c, next) {
     return fail(c, '请先登录', 1, 401);
   }
   const token = authHeader.split(' ')[1];
-  const JWT_SECRET = c.env.JWT_SECRET || 'knowscape-secret-key-2024';
   try {
-    const decoded = await verify(token, JWT_SECRET);
+    const decoded = await verify(token, getJwtSecret(c));
     // 跳过 session 检查，直接验证用户是否存在
     const user = await c.env.DB.prepare(
       'SELECT id, username, email, avatar, bio, is_admin, is_active FROM users WHERE id = ?'
@@ -220,6 +258,7 @@ async function authMiddleware(c, next) {
     c.set('user', user);
     await next();
   } catch (e) {
+    console.error('AUTH ERROR:', e.message, e.stack, 'token prefix:', token?.substring(0, 10), 'secret:', getJwtSecret(c)?.substring(0, 10));
     return fail(c, '无效的登录凭证', 1, 401);
   }
 }
@@ -271,10 +310,45 @@ const SCHEMA_STATEMENTS = SCHEMA_SQL.split(';').filter(s => s.trim());
 app.use('*', async (c, next) => {
   if (c.env.DB) {
     for (const stmt of SCHEMA_STATEMENTS) {
-      try { await c.env.DB.prepare(stmt).all(); } catch (_) {}
+      try { await c.env.DB.prepare(stmt).all(); } catch (_) { /* schema init — 表已存在时正常跳过 */ }
     }
   }
   await next();
+});
+
+// ══════════════════════════════════════════════
+//  系统状态 API
+// ══════════════════════════════════════════════
+
+app.get(`${API}/status`, async (c) => {
+  try {
+    let dbOk = false, dbSize = 0;
+    try {
+      const r = await c.env.DB.prepare(
+        "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table'"
+      ).first();
+      dbOk = true;
+      dbSize = r?.c || 0;
+    } catch {}
+
+    return ok(c, {
+      status: 'ok',
+      version: '2.0.0',
+      uptime: Math.floor((Date.now() - (globalThis.__startedAt || Date.now())) / 1000),
+      environment: typeof c.env.ENVIRONMENT === 'string' ? c.env.ENVIRONMENT : 'production',
+      database: { connected: dbOk, tables: dbSize },
+      features: {
+        auth: true,
+        community: true,
+        agent: true,
+        storage: true,
+        points: true,
+        admin: true,
+      },
+    });
+  } catch (e) {
+    return fail(c, e.message, 1, 500);
+  }
 });
 
 // ══════════════════════════════════════════════
@@ -294,7 +368,6 @@ app.post(`${API}/auth/register`, async (c) => {
       if (existingEmail) return fail(c, '邮箱已被注册');
     }
 
-    const JWT_SECRET = c.env.JWT_SECRET || 'knowscape-secret-key-2024';
     const userId = crypto.randomUUID();
     const passwordHash = await bcrypt.hash(password, 10);
     await c.env.DB.prepare(
@@ -312,7 +385,7 @@ app.post(`${API}/auth/register`, async (c) => {
       'INSERT INTO user_membership (id, user_id, level) VALUES (?, ?, ?)'
     ).run(crypto.randomUUID(), userId, 'free');
 
-    const token = await sign({ userId }, JWT_SECRET);
+    const token = await sign({ userId }, getJwtSecret(c));
     await c.env.DB.prepare(
       "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, datetime('now', '+7 days'))"
     ).run(crypto.randomUUID(), userId, token);
@@ -332,7 +405,6 @@ app.post(`${API}/auth/login`, async (c) => {
     const { username, password } = await c.req.json();
     if (!username || !password) return fail(c, '用户名和密码必填');
 
-    const JWT_SECRET = c.env.JWT_SECRET || 'knowscape-secret-key-2024';
     const user = await c.env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(username).first();
     if (!user) return fail(c, '用户名或密码错误', 1, 401);
 
@@ -341,7 +413,7 @@ app.post(`${API}/auth/login`, async (c) => {
 
     if (!user.is_active) return fail(c, '账号已被禁用', 1, 403);
 
-    const token = await sign({ userId: user.id }, JWT_SECRET);
+    const token = await sign({ userId: user.id }, getJwtSecret(c));
     // 不插入 sessions 表
     // await c.env.DB.prepare(
     //   "INSERT INTO sessions (id, user_id, token, expires_at) VALUES (?, ?, ?, datetime('now', '+7 days'))"
@@ -413,7 +485,7 @@ app.get(`${API}/list-books`, async (c) => {
     const books = await c.env.DB.prepare('SELECT * FROM books ORDER BY created_at DESC').all();
     const result = await Promise.all(books.results.map(async (b) => {
       const total = await c.env.DB.prepare('SELECT COUNT(*) as c FROM chapters WHERE book_id = ?').bind(b.id).first();
-      const chapters = await c.env.DB.prepare('SELECT distilled_content FROM chapters WHERE book_id = ?').all(b.id);
+      const chapters = await c.env.DB.prepare('SELECT distilled_content FROM chapters WHERE book_id = ?').bind(b.id).all();
       let distilledPoints = 0;
       for (const ch of chapters.results) {
         try {
@@ -508,8 +580,6 @@ app.delete(`${API}/delete-book`, async (c) => {
     await c.env.DB.prepare('DELETE FROM graph_edges WHERE source_id IN (SELECT id FROM graph_nodes WHERE book_id = ?)').run(book_id);
     await c.env.DB.prepare('DELETE FROM graph_nodes WHERE book_id = ?').run(book_id);
     await c.env.DB.prepare('DELETE FROM frameworks WHERE book_id = ?').run(book_id);
-    await c.env.DB.prepare('DELETE FROM documents WHERE book_id = ?').run(book_id);
-    await c.env.DB.prepare('DELETE FROM annotations WHERE book_id = ?').run(book_id);
     await c.env.DB.prepare('DELETE FROM chapters WHERE book_id = ?').run(book_id);
     await c.env.DB.prepare('DELETE FROM books WHERE id = ?').run(book_id);
 
@@ -533,7 +603,7 @@ app.get(`${API}/get-book`, async (c) => {
     ).bind(book_id).first();
 
     let distilledPoints = 0;
-    const chs = await c.env.DB.prepare('SELECT distilled_content FROM chapters WHERE book_id = ?').all(book_id);
+    const chs = await c.env.DB.prepare('SELECT distilled_content FROM chapters WHERE book_id = ?').bind(book_id).all();
     for (const ch of chs.results) {
       try {
         const d = JSON.parse(ch.distilled_content || '{}');
@@ -767,7 +837,7 @@ app.get(`${API}/get-distillation-status`, async (c) => {
       try {
         const stored = await c.env.KV.get(`distill:${book_id}`);
         if (stored) progressFromKV = JSON.parse(stored);
-      } catch {}
+      } catch (e) { console.error('WARN: KV distill read failed', e.message); }
     }
 
     const chapters = await c.env.DB.prepare(
@@ -888,34 +958,24 @@ app.get(`${API}/community/resources`, async (c) => {
     query += ' LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
-    const resources = await c.env.DB.prepare(query).all(...params);
+    const stmt = c.env.DB.prepare(query);
+    const resources = params.length > 0 ? await stmt.bind(...params).all() : await stmt.all();
     const totalResult = await c.env.DB.prepare(
       'SELECT COUNT(*) as total FROM community_resources WHERE is_published = 1'
     ).first();
 
-    return ok(c, { items: resources.results, total: totalResult?.total || 0, page, limit });
+    return ok(c, { items: toCamelCase(resources.results || []), total: totalResult?.total || 0, page, limit });
   } catch (e) {
     return fail(c, e.message, 1, 500);
   }
 });
 
-app.post(`${API}/community/resource`, async (c) => {
+const createResourceHandler = async (c) => {
   try {
     const { title, description, book_id, categories, content, cover_color } = await c.req.json();
     if (!title) return fail(c, '标题必填');
 
-    // 尝试从 JWT 获取用户
-    let userId = 'anonymous';
-    const authHeader = c.req.header('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.split(' ')[1];
-        const JWT_SECRET = c.env.JWT_SECRET || 'knowscape-secret-key-2024';
-        const decoded = await verify(token, JWT_SECRET);
-        userId = decoded.userId;
-      } catch {}
-    }
-
+    const userId = (await tryGetUserId(c)) || 'anonymous';
     const id = crypto.randomUUID();
     await c.env.DB.prepare(
       'INSERT INTO community_resources (id, user_id, book_id, title, description, categories, content, cover_color) VALUES (?,?,?,?,?,?,?,?)'
@@ -929,23 +989,16 @@ app.post(`${API}/community/resource`, async (c) => {
   } catch (e) {
     return fail(c, e.message, 1, 500);
   }
-});
+};
+
+app.post(`${API}/community/resource`, createResourceHandler);
+app.post(`${API}/community/resources`, createResourceHandler);
 
 app.post(`${API}/community/resources/:id/like`, async (c) => {
   try {
     const resourceId = c.req.param('id');
 
-    let userId = 'anonymous';
-    const authHeader = c.req.header('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.split(' ')[1];
-        const JWT_SECRET = c.env.JWT_SECRET || 'knowscape-secret-key-2024';
-        const decoded = await verify(token, JWT_SECRET);
-        userId = decoded.userId;
-      } catch {}
-    }
-
+    const userId = (await tryGetUserId(c)) || 'anonymous';
     const existing = await c.env.DB.prepare(
       'SELECT id FROM community_likes WHERE user_id = ? AND resource_id = ?'
     ).bind(userId, resourceId).first();
@@ -978,6 +1031,17 @@ app.get(`${API}/community/stats`, async (c) => {
       resources: resourceCount?.c || 0,
       users: userCount?.c || 0,
     });
+  } catch (e) {
+    return fail(c, e.message, 1, 500);
+  }
+});
+
+app.get(`${API}/community/co-reading`, async (c) => {
+  try {
+    const items = await c.env.DB.prepare(
+      'SELECT * FROM community_co_reading WHERE status = ? ORDER BY reader_count DESC LIMIT 10'
+    ).bind('active').all();
+    return ok(c, toCamelCase(items.results || []));
   } catch (e) {
     return fail(c, e.message, 1, 500);
   }
@@ -1449,6 +1513,128 @@ app.delete(`${API}/agent/conversations/:id`, authMiddleware, async (c) => {
     return ok(c, null, '已删除');
   } catch (e) {
     return fail(c, e.message);
+  }
+});
+
+app.post(`${API}/agent/chat`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { conversation_id, message, book_id } = await c.req.json();
+    if (!message) return fail(c, '消息不能为空');
+
+    let convId = conversation_id;
+    let bookTitle = '';
+
+    // 创建新对话
+    if (!convId) {
+      convId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        "INSERT INTO agent_conversations (id, user_id, title, book_id) VALUES (?, ?, ?, ?)"
+      ).bind(convId, user.id, message.slice(0, 50), book_id || null).run();
+    } else {
+      const conv = await c.env.DB.prepare(
+        "SELECT * FROM agent_conversations WHERE id = ? AND user_id = ?"
+      ).bind(convId, user.id).first();
+      if (!conv) return fail(c, '对话不存在', 1, 404);
+      bookTitle = conv.book_title || '';
+    }
+
+    // 保存用户消息
+    const msgId = crypto.randomUUID();
+    await c.env.DB.prepare(
+      "INSERT INTO agent_messages (id, conversation_id, role, content) VALUES (?, ?, 'user', ?)"
+    ).bind(msgId, convId, message).run();
+
+    // 取最近上下文
+    const recent = await c.env.DB.prepare(
+      "SELECT role, content FROM agent_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 10"
+    ).bind(convId).all();
+    const contextMessages = (recent.results || []).reverse();
+
+    const apiKey = c.env.DEEPSEEK_API_KEY;
+    let answer = '抱歉，AI 服务暂未配置';
+
+    if (apiKey) {
+      const systemPrompt = bookTitle
+        ? `你是 KnowScape 智能助手，正在帮助用户阅读《${bookTitle}》。请基于书籍内容回答用户问题，并提供有深度的见解。`
+        : '你是 KnowScape 智能助手，帮助用户阅读、理解和梳理知识。回答要简洁、有深度。';
+
+      const resp = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...contextMessages.map(m => ({ role: m.role, content: m.content })),
+          ],
+          temperature: 0.7,
+          max_tokens: 2048,
+        }),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        answer = data.choices?.[0]?.message?.content || '抱歉，AI 未返回有效响应';
+      } else {
+        answer = 'AI 服务暂时不可用，请稍后再试';
+      }
+    }
+
+    // 保存助手回复
+    const respId = crypto.randomUUID();
+    await c.env.DB.prepare(
+      "INSERT INTO agent_messages (id, conversation_id, role, content) VALUES (?, ?, 'assistant', ?)"
+    ).bind(respId, convId, answer).run();
+
+    // 更新对话时间
+    await c.env.DB.prepare(
+      "UPDATE agent_conversations SET updated_at = datetime('now') WHERE id = ?"
+    ).bind(convId).run();
+
+    return ok(c, {
+      conversation_id: convId,
+      answer,
+      token_usage: null,
+      tool_calls: [],
+      tool_results: [],
+    });
+  } catch (e) {
+    return fail(c, e.message, 1, 500);
+  }
+});
+
+app.post(`${API}/agent/export`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { conversation_id } = await c.req.json();
+    if (!conversation_id) return fail(c, '缺少 conversation_id');
+
+    const conv = await c.env.DB.prepare(
+      "SELECT * FROM agent_conversations WHERE id = ? AND user_id = ?"
+    ).bind(conversation_id, user.id).first();
+    if (!conv) return fail(c, '对话不存在', 1, 404);
+
+    const msgs = await c.env.DB.prepare(
+      "SELECT role, content, created_at FROM agent_messages WHERE conversation_id = ? ORDER BY created_at"
+    ).bind(conversation_id).all();
+
+    const markdown = (msgs.results || []).map(m => {
+      const prefix = m.role === 'user' ? '**你**' : '**AI**';
+      return `## ${prefix}（${m.created_at}）\n\n${m.content}\n\n---\n`;
+    }).join('\n');
+
+    const title = conv.title || '对话导出';
+    const content = `# ${title}\n\n${markdown}`;
+
+    return new Response(content, {
+      headers: {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${title}.md"`,
+      },
+    });
+  } catch (e) {
+    return fail(c, e.message, 1, 500);
   }
 });
 

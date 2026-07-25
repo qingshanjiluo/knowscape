@@ -162,9 +162,9 @@ export default function CommunityPage() {
       fetch('/api/v1/community/co-reading').then(function(r) { return r.json(); }),
       fetch('/api/v1/community/stats').then(function(r) { return r.json(); }),
     ]).then(function([resources, coReading, stats]) {
-      setApiResources(resources.items || []);
-      setApiCoReading(coReading || []);
-      setApiStats(stats || { resources: 0, users: 0, co_reading: 0 });
+      setApiResources(resources && resources.data ? (resources.data.items || []) : []);
+      setApiCoReading(coReading && coReading.data ? (Array.isArray(coReading.data) ? coReading.data : []) : []);
+      setApiStats(stats && stats.data ? stats.data : { resources: 0, users: 0, co_reading: 0 });
     }).catch(function() {});
   }, [activeCategory, sortBy, searchQuery]);
 
@@ -202,7 +202,7 @@ export default function CommunityPage() {
     if (!publishTitle.trim()) return;
     try {
       const token = (await import('@/stores/authStore')).useAuthStore.getState().token;
-      const resp = await fetch('/api/v1/community/resources', {
+      const resp = await       fetch('/api/v1/community/resource', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -431,9 +431,9 @@ export default function CommunityPage() {
           </div>
 
           <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-            {apiCoReading.map((item) => (
+            {Array.isArray(apiCoReading) ? apiCoReading.map((item) => (
               <CoReadingCard key={item.id} item={item} />
-            ))}
+            )) : null}
           </div>
         </section>
       </div>

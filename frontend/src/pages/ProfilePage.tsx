@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '@/stores/authStore';
 import {
   User,
   Pencil,
@@ -176,7 +177,7 @@ export default function ProfilePage() {
 
   // 加载存储信息
   useEffect(() => {
-    fetch('/api/v1/user/storage', { headers: { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } })
+    fetch('/api/v1/user/storage', { headers: { Authorization: `Bearer ${useAuthStore.getState().token}` } })
       .then(r => r.json())
       .then(d => { if (d.data) setStorage(d.data); })
       .catch(() => {});

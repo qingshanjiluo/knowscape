@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Plus, MessageSquare, Send, Loader2, Download, Trash2, Bot, User, Wrench } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useBookStore } from '@/stores/bookStore';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Conversation {
   id: string;
@@ -41,6 +42,11 @@ export default function AgentPanel({ isOpen, onClose, embedded }: AgentPanelProp
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
+  function authHeaders() {
+    const token = useAuthStore.getState().token;
+    return token ? { 'Authorization': 'Bearer ' + token } : {};
+  }
+
   useEffect(() => {
     if (isOpen) fetchConversations();
   }, [isOpen]);
@@ -51,9 +57,9 @@ export default function AgentPanel({ isOpen, onClose, embedded }: AgentPanelProp
 
   async function fetchConversations() {
     try {
-      const resp = await fetch('/api/v1/agent/conversations');
+      const resp = await fetch('/api/v1/agent/conversations', { headers: { ...authHeaders() } });
       const data = await resp.json();
-      setConversations(data);
+      setConversations(data && data.data ? data.data : Array.isArray(data) ? data : []);
     } catch {}
   }
 
@@ -61,9 +67,9 @@ export default function AgentPanel({ isOpen, onClose, embedded }: AgentPanelProp
     setActiveConvId(convId);
     setShowConversations(false);
     try {
-      const resp = await fetch(`/api/v1/agent/conversations/${convId}/messages`);
+      const resp = await fetch(`/api/v1/agent/conversations/${convId}/messages`, { headers: { ...authHeaders() } });
       const data = await resp.json();
-      setMessages(data);
+      setMessages(data && data.data ? data.data : Array.isArray(data) ? data : []);
     } catch {}
   }
 
@@ -71,18 +77,19 @@ export default function AgentPanel({ isOpen, onClose, embedded }: AgentPanelProp
     try {
       const resp = await fetch('/api/v1/agent/conversations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ book_id: selectedBookId, title: '新对话' }),
       });
       const conv = await resp.json();
-      setConversations(prev => [conv, ...prev]);
-      loadMessages(conv.id);
+      const newConv = conv && conv.data ? conv.data : conv;
+      setConversations(prev => [newConv, ...prev]);
+      loadMessages(newConv.id);
     } catch {}
   }
 
   async function deleteConversation(convId: string) {
     try {
-      await fetch(`/api/v1/agent/conversations/${convId}`, { method: 'DELETE' });
+      await fetch(`/api/v1/agent/conversations/${convId}`, { method: 'DELETE', headers: { ...authHeaders() } });
       setConversations(prev => prev.filter(c => c.id !== convId));
       if (activeConvId === convId) {
         setActiveConvId(null);
@@ -107,27 +114,28 @@ export default function AgentPanel({ isOpen, onClose, embedded }: AgentPanelProp
     try {
       const resp = await fetch('/api/v1/agent/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({
           conversation_id: activeConvId,
           message: userMsg.content,
           book_id: selectedBookId,
         }),
       });
-      const data = await resp.json();
+      const json = await resp.json();
+      const d = json && json.data ? json.data : json;
 
-      if (!activeConvId && data.conversation_id) {
-        setActiveConvId(data.conversation_id);
+      if (!activeConvId && d.conversation_id) {
+        setActiveConvId(d.conversation_id);
         fetchConversations();
       }
 
       const assistantMsg: AgentMessage = {
         id: 'resp-' + Date.now(),
         role: 'assistant',
-        content: data.answer || data.detail || '无响应',
-        tool_calls: JSON.stringify(data.tool_calls || []),
-        tool_results: JSON.stringify(data.tool_results || []),
-        token_usage: data.token_usage || undefined,
+        content: d.answer || d.detail || '无响应',
+        tool_calls: JSON.stringify(d.tool_calls || []),
+        tool_results: JSON.stringify(d.tool_results || []),
+        token_usage: d.token_usage || undefined,
         created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev.slice(0, -1), userMsg, assistantMsg]);
@@ -148,7 +156,7 @@ export default function AgentPanel({ isOpen, onClose, embedded }: AgentPanelProp
     try {
       const resp = await fetch('/api/v1/agent/export', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ conversation_id: activeConvId }),
       });
       const blob = await resp.blob();

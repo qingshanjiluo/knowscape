@@ -105,8 +105,9 @@ export default function AdminPage() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || !user.is_admin) {
-      navigate('/');
+    const token = useAuthStore.getState().token;
+    if (!user || !user.is_admin || !token) {
+      navigate(!token ? '/login' : '/');
       return;
     }
     loadConfig();
@@ -121,10 +122,12 @@ export default function AdminPage() {
 
   const loadConfig = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
+      if (!token) return;
       const resp = await fetch('/api/v1/admin/llm-config', {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (resp.status === 401) { navigate('/login'); return; }
       if (resp.ok) {
         setConfig(await resp.json());
       }
@@ -140,7 +143,7 @@ export default function AdminPage() {
     setSaving(true);
     setMessage('');
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
       const resp = await fetch('/api/v1/admin/llm-config', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -190,10 +193,12 @@ export default function AdminPage() {
   const loadUsers = async () => {
     setUsersLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
+      if (!token) { setUsersLoading(false); return; }
       const resp = await fetch('/api/v1/admin/users', {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (resp.status === 401) { navigate('/login'); return; }
       if (resp.ok) {
         setUsers(await resp.json());
       }
@@ -207,7 +212,7 @@ export default function AdminPage() {
   const toggleUserActive = async (userId: number, currentActive: boolean) => {
     setUsersMessage('');
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
       const resp = await fetch(`/api/v1/admin/users/${userId}/${currentActive ? 'disable' : 'enable'}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -227,7 +232,7 @@ export default function AdminPage() {
   const toggleUserAdmin = async (userId: number, currentAdmin: boolean) => {
     setUsersMessage('');
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
       const resp = await fetch(`/api/v1/admin/users/${userId}/${currentAdmin ? 'remove-admin' : 'set-admin'}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -249,10 +254,12 @@ export default function AdminPage() {
   const loadRedeemCodes = async () => {
     setRedeemCodesLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
+      if (!token) { setRedeemCodesLoading(false); return; }
       const resp = await fetch('/api/v1/admin/redeem-codes', {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (resp.status === 401) { navigate('/login'); return; }
       if (resp.ok) {
         setRedeemCodes(await resp.json());
       }
@@ -266,7 +273,7 @@ export default function AdminPage() {
   const generateRedeemCodes = async () => {
     setRedeemMessage('');
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
       const resp = await fetch('/api/v1/admin/redeem-codes', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -307,10 +314,12 @@ export default function AdminPage() {
   const loadRedeemRequests = async (status = 'pending') => {
     setRedeemRequestsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
+      if (!token) { setRedeemRequestsLoading(false); return; }
       const resp = await fetch(`/api/v1/admin/redeem-requests?status=${status}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (resp.status === 401) { navigate('/login'); return; }
       if (resp.ok) {
         const data = await resp.json();
         setRedeemRequests(data.data || data || []);
@@ -326,7 +335,7 @@ export default function AdminPage() {
     setApprovingId(reqId);
     setRedeemRequestsMessage(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
       const resp = await fetch(`/api/v1/admin/redeem-requests/${reqId}/approve`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -350,10 +359,12 @@ export default function AdminPage() {
   const loadSystemSettings = async () => {
     setSettingsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
+      if (!token) { setSettingsLoading(false); return; }
       const resp = await fetch('/api/v1/admin/settings', {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (resp.status === 401) { navigate('/login'); return; }
       if (resp.ok) {
         const data = await resp.json();
         setSystemSettings({
@@ -376,7 +387,7 @@ export default function AdminPage() {
     setSettingsSaving(true);
     setSettingsMessage('');
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
       const resp = await fetch('/api/v1/admin/settings', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -400,10 +411,12 @@ export default function AdminPage() {
   const loadPointsConfig = async () => {
     setPointsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
+      if (!token) { setPointsLoading(false); return; }
       const resp = await fetch('/api/v1/admin/points-config', {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (resp.status === 401) { navigate('/login'); return; }
       if (resp.ok) {
         setPointsConfig(await resp.json());
       }
@@ -419,7 +432,7 @@ export default function AdminPage() {
     setPointsSaving(true);
     setPointsMessage('');
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = useAuthStore.getState().token;
       const resp = await fetch('/api/v1/admin/points-config', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
