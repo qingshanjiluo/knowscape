@@ -147,6 +147,27 @@ CREATE TABLE IF NOT EXISTS knowledge_maps (
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS redeem_codes (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  points INTEGER DEFAULT 0,
+  uses_left INTEGER DEFAULT 1,
+  max_uses INTEGER DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT
+);
+CREATE TABLE IF NOT EXISTS redeemed_codes (
+  id TEXT PRIMARY KEY,
+  code_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  redeemed_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
 `;
 
 // ─── 中间件 ───
@@ -327,6 +348,29 @@ app.post(`${API}/auth/logout`, authMiddleware, async (c) => {
     const token = authHeader.split(' ')[1];
     await c.env.DB.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return ok(c, null, '登出成功');
+  } catch (e) {
+    return fail(c, e.message, 1, 500);
+  }
+});
+
+// ─── 用户资料更新 ───
+app.post(`${API}/user/profile`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { username, bio, email, avatar } = await c.req.json();
+    if (username) {
+      await c.env.DB.prepare('UPDATE users SET username = ? WHERE id = ?').bind(username, user.id).run();
+    }
+    if (bio !== undefined) {
+      await c.env.DB.prepare('UPDATE users SET bio = ? WHERE id = ?').bind(bio, user.id).run();
+    }
+    if (email !== undefined) {
+      await c.env.DB.prepare('UPDATE users SET email = ? WHERE id = ?').bind(email, user.id).run();
+    }
+    if (avatar !== undefined) {
+      await c.env.DB.prepare('UPDATE users SET avatar = ? WHERE id = ?').bind(avatar, user.id).run();
+    }
+    return ok(c, null, '资料已更新');
   } catch (e) {
     return fail(c, e.message, 1, 500);
   }
@@ -1378,6 +1422,174 @@ app.delete(`${API}/agent/conversations/:id`, authMiddleware, async (c) => {
   } catch (e) {
     return fail(c, e.message);
   }
+});
+
+// ─── 管理员：用户管理 ───
+app.get(`${API}/admin/users`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const users = await c.env.DB.prepare('SELECT id, username, email, is_active, is_admin, created_at FROM users ORDER BY created_at DESC').all();
+    return ok(c, users.results || []);
+  } catch (e) { return fail(c, e.message); }
+});
+
+app.post(`${API}/admin/users/:id/toggle-active`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const targetId = c.req.param('id');
+    const target = await c.env.DB.prepare('SELECT id, is_active FROM users WHERE id = ?').bind(targetId).first();
+    if (!target) return fail(c, '用户不存在', 1, 404);
+    await c.env.DB.prepare('UPDATE users SET is_active = ? WHERE id = ?').bind(target.is_active ? 0 : 1, targetId).run();
+    return ok(c, null, target.is_active ? '已禁用' : '已启用');
+  } catch (e) { return fail(c, e.message); }
+});
+
+app.post(`${API}/admin/users/:id/toggle-admin`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const targetId = c.req.param('id');
+    const target = await c.env.DB.prepare('SELECT id, is_admin FROM users WHERE id = ?').bind(targetId).first();
+    if (!target) return fail(c, '用户不存在', 1, 404);
+    await c.env.DB.prepare('UPDATE users SET is_admin = ? WHERE id = ?').bind(target.is_admin ? 0 : 1, targetId).run();
+    return ok(c, null, target.is_admin ? '已撤销管理员' : '已设为管理员');
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 管理员：系统设置 ───
+app.get(`${API}/admin/settings`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const rows = await c.env.DB.prepare('SELECT key, value FROM system_settings').all();
+    const settings = {};
+    (rows.results || []).forEach(r => { settings[r.key] = r.value; });
+    return ok(c, settings);
+  } catch (e) { return fail(c, e.message); }
+});
+
+app.post(`${API}/admin/settings`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const body = await c.req.json();
+    for (const [key, value] of Object.entries(body)) {
+      await c.env.DB.prepare(
+        'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))'
+      ).bind(key, String(value)).run();
+    }
+    return ok(c, null, '设置已保存');
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 管理员：积分配置 ───
+app.get(`${API}/admin/points-config`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const defaults = { checkin: 5, comment: 2, like: 1, publish: 5, read: 3 };
+    const rows = await c.env.DB.prepare("SELECT key, value FROM system_settings WHERE key LIKE 'points_%'").all();
+    (rows.results || []).forEach(r => { defaults[r.key.replace('points_', '')] = parseInt(r.value) || defaults[r.key.replace('points_', '')]; });
+    return ok(c, defaults);
+  } catch (e) { return fail(c, e.message); }
+});
+
+app.post(`${API}/admin/points-config`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const body = await c.req.json();
+    for (const [key, value] of Object.entries(body)) {
+      await c.env.DB.prepare(
+        'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))'
+      ).bind(`points_${key}`, String(value)).run();
+    }
+    return ok(c, null, '积分配置已保存');
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 管理员：兑换码管理 ───
+app.get(`${API}/admin/redeem-codes`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const codes = await c.env.DB.prepare('SELECT * FROM redeem_codes ORDER BY created_at DESC').all();
+    return ok(c, codes.results || []);
+  } catch (e) { return fail(c, e.message); }
+});
+
+app.post(`${API}/admin/redeem-codes`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user.is_admin) return fail(c, '无权限', 1, 403);
+    const { points, count = 1, expires_days = 30 } = await c.req.json();
+    const codes = [];
+    for (let i = 0; i < count; i++) {
+      const code = 'KS-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+      const id = crypto.randomUUID();
+      await c.env.DB.prepare(
+        "INSERT INTO redeem_codes (id, code, points, created_by, expires_at) VALUES (?, ?, ?, ?, datetime('now', '+' || ? || ' days'))"
+      ).bind(id, code, points || 0, user.id, expires_days || 30).run();
+      codes.push(code);
+    }
+    return ok(c, codes, `已生成 ${count} 个兑换码`);
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 用户：兑换码 ───
+app.post(`${API}/redeem`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { code } = await c.req.json();
+    if (!code) return fail(c, '请输入兑换码');
+    const rc = await c.env.DB.prepare(
+      "SELECT * FROM redeem_codes WHERE code = ? AND (expires_at IS NULL OR expires_at > datetime('now'))"
+    ).bind(code.toUpperCase()).first();
+    if (!rc) return fail(c, '无效或已过期的兑换码');
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM redeemed_codes WHERE code_id = ? AND user_id = ?'
+    ).bind(rc.id, user.id).first();
+    if (existing) return fail(c, '该兑换码已被你使用过');
+    if (rc.uses_left <= 0) return fail(c, '兑换码已用完');
+    // Add points to user
+    const pointsRecord = await c.env.DB.prepare('SELECT id FROM user_points WHERE user_id = ?').bind(user.id).first();
+    if (pointsRecord) {
+      await c.env.DB.prepare('UPDATE user_points SET balance = balance + ?, total_earned = total_earned + ? WHERE user_id = ?').bind(rc.points, rc.points, user.id).run();
+    } else {
+      await c.env.DB.prepare('INSERT INTO user_points (id, user_id, balance, total_earned) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), user.id, rc.points, rc.points).run();
+    }
+    await c.env.DB.prepare('INSERT INTO redeemed_codes (id, code_id, user_id) VALUES (?, ?, ?)').bind(crypto.randomUUID(), rc.id, user.id).run();
+    await c.env.DB.prepare('UPDATE redeem_codes SET uses_left = uses_left - 1 WHERE id = ?').bind(rc.id).run();
+    return ok(c, { points: rc.points }, `成功兑换 ${rc.points} 积分`);
+  } catch (e) { return fail(c, e.message); }
+});
+
+// ─── 用户：订阅管理 ───
+app.get(`${API}/user/subscription`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const sub = await c.env.DB.prepare("SELECT * FROM subscriptions WHERE user_id = ? AND status = 'active' AND (expires_at IS NULL OR expires_at > datetime('now'))").bind(user.id).first();
+    return ok(c, sub || null);
+  } catch (e) { return fail(c, e.message); }
+});
+
+app.post(`${API}/user/subscribe`, authMiddleware, async (c) => {
+  try {
+    const user = c.get('user');
+    const { plan } = await c.req.json();
+    const plans = { basic: 29, standard: 59, premium: 89, flagship: 199 };
+    if (!plans[plan]) return fail(c, '无效套餐');
+    // In real app, handle payment here
+    const existing = await c.env.DB.prepare("SELECT id FROM subscriptions WHERE user_id = ? AND status = 'active'").bind(user.id).first();
+    if (existing) {
+      await c.env.DB.prepare("UPDATE subscriptions SET plan = ?, updated_at = datetime('now'), expires_at = datetime('now', '+1 month') WHERE user_id = ? AND status = 'active'").bind(plan, user.id).run();
+    } else {
+      await c.env.DB.prepare("INSERT INTO subscriptions (id, user_id, plan, status, started_at, expires_at) VALUES (?, ?, ?, 'active', datetime('now'), datetime('now', '+1 month'))").bind(crypto.randomUUID(), user.id, plan).run();
+    }
+    return ok(c, { plan }, `已订阅 ${plan} 套餐`);
+  } catch (e) { return fail(c, e.message); }
 });
 
 // ─── 导出 ───

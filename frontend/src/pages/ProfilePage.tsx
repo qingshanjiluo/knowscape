@@ -17,6 +17,7 @@ import {
   FileText,
   Share2,
   Calendar,
+  X,
 } from 'lucide-react';
 import { useBookStore } from '@/stores/bookStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -67,6 +68,8 @@ export default function ProfilePage() {
   const [userProfile, setUserProfile] = useState({
     username: '知识探索者',
     bio: '热爱阅读，致力于将知识转化为可复用的思维工具',
+    email: '',
+    avatar: '',
     created_at: '',
   });
 
@@ -78,6 +81,8 @@ export default function ProfilePage() {
           const profile = {
             username: data.username || '知识探索者',
             bio: data.bio || '热爱阅读，致力于将知识转化为可复用的思维工具',
+            email: data.email || '',
+            avatar: data.avatar || '',
             created_at: data.created_at || '',
           };
           setUserProfile(profile);
@@ -101,6 +106,7 @@ export default function ProfilePage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [displayName, setDisplayName] = useState('知识探索者');
   const [editNameInput, setEditNameInput] = useState('知识探索者');
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   // ── Check-in state ──
   const [checkedToday, setCheckedToday] = useState(false);
@@ -160,6 +166,31 @@ export default function ProfilePage() {
       })
       .catch(() => {});
   }, [checkedToday]);
+
+  const handleSaveProfile = async (data: { username: string; bio: string; email: string; avatar: string }) => {
+    try {
+      const res = await fetch('/api/v1/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        setEditModalOpen(false);
+        const updated = await fetch('/api/v1/auth/me').then(r => r.json());
+        if (updated && updated.username) {
+          setUserProfile({
+            username: updated.username || '知识探索者',
+            bio: updated.bio || '',
+            email: updated.email || '',
+            avatar: updated.avatar || '',
+            created_at: updated.created_at || '',
+          });
+          setDisplayName(updated.username);
+          setEditNameInput(updated.username);
+        }
+      }
+    } catch {}
+  };
 
   return (
     <div
@@ -224,13 +255,10 @@ export default function ProfilePage() {
                 </h1>
               )}
               <button
-                onClick={() => {
-                  setEditNameInput(displayName);
-                  setIsEditingName(!isEditingName);
-                }}
+                onClick={() => setEditModalOpen(true)}
                 className="p-1 rounded-[var(--radius-ks-sm)] cursor-pointer transition-opacity duration-150 hover:opacity-70"
                 style={{ color: 'var(--color-ks-text-muted)' }}
-                aria-label="编辑昵称"
+                aria-label="编辑资料"
               >
                 <Pencil size={14} />
               </button>
@@ -256,6 +284,7 @@ export default function ProfilePage() {
             {/* Edit profile button */}
             <div className="mt-1">
               <button
+                onClick={() => setEditModalOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-[var(--radius-ks-sm)] cursor-pointer transition-opacity duration-150 hover:opacity-80"
                 style={{
                   fontFamily: 'var(--font-family-ks-heading)',
@@ -769,6 +798,18 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
+
+      <ProfileEditModal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        onSave={handleSaveProfile}
+        initialData={{
+          username: displayName,
+          bio: userProfile.bio,
+          email: userProfile.email,
+          avatar: userProfile.avatar,
+        }}
+      />
     </div>
   );
 }
@@ -827,4 +868,207 @@ function getTimeAgo(isoDate: string): string {
   const diffDay = Math.floor(diffHr / 24);
   if (diffDay < 30) return `${diffDay} 天前`;
   return `${Math.floor(diffDay / 30)} 月前`;
+}
+
+/* ═══════════════════════════════════════════
+   ProfileEditModal
+   ═══════════════════════════════════════════ */
+
+function ProfileEditModal({
+  open,
+  onClose,
+  onSave,
+  initialData,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (data: { username: string; bio: string; email: string; avatar: string }) => void;
+  initialData: { username: string; bio: string; email: string; avatar: string };
+}) {
+  const [username, setUsername] = useState(initialData.username);
+  const [bio, setBio] = useState(initialData.bio);
+  const [email, setEmail] = useState(initialData.email);
+  const [avatar, setAvatar] = useState(initialData.avatar);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setUsername(initialData.username);
+      setBio(initialData.bio);
+      setEmail(initialData.email);
+      setAvatar(initialData.avatar);
+    }
+  }, [open, initialData]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open) onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    await onSave({ username, bio, email, avatar });
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} />
+      <div
+        className="relative w-full max-w-md mx-4 rounded-xl overflow-hidden"
+        style={{
+          backgroundColor: 'var(--color-ks-card)',
+          border: '1px solid var(--color-ks-border)',
+          boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: '1px solid var(--color-ks-border)' }}
+        >
+          <h2
+            className="text-base font-semibold"
+            style={{ fontFamily: 'var(--font-family-ks-heading)', color: 'var(--color-ks-text)' }}
+          >
+            编辑资料
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-[var(--radius-ks-sm)] cursor-pointer transition-opacity duration-150 hover:opacity-70"
+            style={{ color: 'var(--color-ks-text-muted)' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4">
+          {/* Username */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              className="text-xs font-medium"
+              style={{ fontFamily: 'var(--font-family-ks-heading)', color: 'var(--color-ks-text-secondary)' }}
+            >
+              用户名
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="h-9 px-3 text-sm rounded-[var(--radius-ks-sm)] outline-none"
+              style={{
+                fontFamily: 'var(--font-family-ks-heading)',
+                backgroundColor: 'var(--color-ks-bg)',
+                border: '1px solid var(--color-ks-border)',
+                color: 'var(--color-ks-text)',
+              }}
+            />
+          </div>
+
+          {/* Bio */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              className="text-xs font-medium"
+              style={{ fontFamily: 'var(--font-family-ks-heading)', color: 'var(--color-ks-text-secondary)' }}
+            >
+              个人简介
+            </label>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows={3}
+              className="px-3 py-2 text-sm rounded-[var(--radius-ks-sm)] outline-none resize-none"
+              style={{
+                fontFamily: 'var(--font-family-ks-heading)',
+                backgroundColor: 'var(--color-ks-bg)',
+                border: '1px solid var(--color-ks-border)',
+                color: 'var(--color-ks-text)',
+              }}
+            />
+          </div>
+
+          {/* Email */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              className="text-xs font-medium"
+              style={{ fontFamily: 'var(--font-family-ks-heading)', color: 'var(--color-ks-text-secondary)' }}
+            >
+              邮箱
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-9 px-3 text-sm rounded-[var(--radius-ks-sm)] outline-none"
+              style={{
+                fontFamily: 'var(--font-family-ks-heading)',
+                backgroundColor: 'var(--color-ks-bg)',
+                border: '1px solid var(--color-ks-border)',
+                color: 'var(--color-ks-text)',
+              }}
+            />
+          </div>
+
+          {/* Avatar URL */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              className="text-xs font-medium"
+              style={{ fontFamily: 'var(--font-family-ks-heading)', color: 'var(--color-ks-text-secondary)' }}
+            >
+              头像 URL
+            </label>
+            <input
+              type="text"
+              value={avatar}
+              onChange={(e) => setAvatar(e.target.value)}
+              className="h-9 px-3 text-sm rounded-[var(--radius-ks-sm)] outline-none"
+              style={{
+                fontFamily: 'var(--font-family-ks-heading)',
+                backgroundColor: 'var(--color-ks-bg)',
+                border: '1px solid var(--color-ks-border)',
+                color: 'var(--color-ks-text)',
+              }}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 mt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium rounded-[var(--radius-ks-sm)] cursor-pointer transition-opacity duration-150 hover:opacity-70"
+              style={{
+                fontFamily: 'var(--font-family-ks-heading)',
+                backgroundColor: 'transparent',
+                color: 'var(--color-ks-text-secondary)',
+                border: '1px solid var(--color-ks-border)',
+              }}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-[var(--radius-ks-sm)] cursor-pointer transition-opacity duration-150 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                fontFamily: 'var(--font-family-ks-heading)',
+                backgroundColor: 'var(--color-ks-primary)',
+                color: 'white',
+              }}
+            >
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }

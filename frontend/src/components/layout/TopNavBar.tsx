@@ -19,6 +19,7 @@ const NAV_LINKS = [
   { to: '/', label: '主页' },
   { to: '/workspace', label: '所有书籍', icon: BookOpen },
   { to: '/community', label: '社区' },
+  { to: '/plan', label: '套餐' },
   { to: '/profile', label: '个人中心' },
 ] as const;
 
@@ -147,6 +148,9 @@ export default function TopNavBar() {
         {/* AI + Knowledge Map — grouped as tool toggles */}
         <button
           onClick={() => {
+            if (!location.pathname.startsWith('/workspace')) {
+              navigate('/workspace');
+            }
             const { setRightPanel, rightPanel } = useUIStore.getState();
             setRightPanel(rightPanel === 'agent' ? null : 'agent');
           }}
@@ -170,6 +174,9 @@ export default function TopNavBar() {
 
         <button
           onClick={() => {
+            if (!location.pathname.startsWith('/workspace')) {
+              navigate('/workspace');
+            }
             const { rightPanel, setRightPanel } = useUIStore.getState();
             setRightPanel(rightPanel === 'knowledge-map' ? null : 'knowledge-map');
           }}

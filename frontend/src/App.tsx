@@ -15,6 +15,7 @@ import BookFolderView from '@/components/workspace/BookFolderView';
 import BookFrameworkTree from '@/components/workspace/BookFrameworkTree';
 import HomePage from '@/pages/HomePage';
 import ProfilePage from '@/pages/ProfilePage';
+import PlanPage from '@/pages/PlanPage';
 import CommunityPage from '@/pages/CommunityPage';
 import LoginPage from '@/pages/LoginPage';
 import AdminPage from '@/pages/AdminPage';
@@ -317,6 +318,7 @@ function AppShell() {
             <Route path="/workspace/ai-stats" element={<WorkspaceSubLayout><AIUsageStats /></WorkspaceSubLayout>} />
             <Route path="/community" element={<FullWidthLayout><CommunityPage /></FullWidthLayout>} />
             <Route path="/profile" element={<FullWidthLayout><ProfilePage /></FullWidthLayout>} />
+            <Route path="/plan" element={<FullWidthLayout><PlanPage /></FullWidthLayout>} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/admin" element={<FullWidthLayout><AdminPage /></FullWidthLayout>} />
           </Routes>
