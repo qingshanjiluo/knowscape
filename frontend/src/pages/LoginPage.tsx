@@ -28,7 +28,8 @@ export default function LoginPage() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || '操作失败');
-      setAuth(data.token, data.user);
+      const d = data.data || data;
+      setAuth(d.token, d.user);
       navigate('/workspace');
     } catch (err) {
       setError(err instanceof Error ? err.message : '操作失败');

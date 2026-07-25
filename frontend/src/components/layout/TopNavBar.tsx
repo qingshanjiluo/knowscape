@@ -223,22 +223,24 @@ export default function TopNavBar() {
           style={{ backgroundColor: 'var(--color-ks-border)' }}
         />
 
-        {user?.is_admin && (
+        {/* Admin button — always visible when user is admin */}
+        {user?.is_admin ? (
           <NavLink
             to="/admin"
-            className="flex items-center h-8 px-2 rounded-lg text-[11px] font-medium transition-colors no-underline cursor-pointer"
+            className="flex items-center gap-1 h-8 px-2.5 rounded-lg text-[11px] font-medium transition-colors no-underline cursor-pointer"
             style={({ isActive }) => ({
               color: isActive ? 'var(--color-ks-primary)' : 'var(--color-ks-text-muted)',
               backgroundColor: isActive ? 'var(--color-ks-hover)' : 'transparent',
             })}
           >
             <Shield size={13} />
+            <span>管理</span>
           </NavLink>
-        )}
+        ) : null}
 
         {/* User: logged in -> avatar, not logged in -> login */}
         {user ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 group">
             <NavLink
               to="/profile"
               className="flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 no-underline shrink-0 hover:scale-105"
@@ -252,9 +254,12 @@ export default function TopNavBar() {
             >
               {user.username ? user.username.charAt(0).toUpperCase() : <User size={15} strokeWidth={2.2} />}
             </NavLink>
+            <span className="text-xs font-medium hidden lg:inline" style={{ color: 'var(--color-ks-text-secondary)' }}>
+              {user.username}
+            </span>
             <button
               onClick={() => { logout(); navigate('/'); }}
-              className="p-1.5 rounded-md transition-colors duration-150 cursor-pointer opacity-0 group-hover:opacity-100"
+              className="p-1.5 rounded-md transition-opacity duration-150 cursor-pointer opacity-0 group-hover:opacity-100 hover:opacity-100"
               style={{ color: 'var(--color-ks-text-muted)' }}
               aria-label="退出登录"
               title="退出登录"

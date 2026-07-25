@@ -304,7 +304,7 @@ function AppShell() {
       <ViewModeSync />
       <div className="flex flex-col h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-ks-bg)' }}>
         <TopNavBar />
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col pt-12">
           <Routes>
             <Route path="/" element={<FullWidthLayout><HomePage /></FullWidthLayout>} />
             <Route path="/workspace" element={<WorkspaceSubLayout showShelf />} />
