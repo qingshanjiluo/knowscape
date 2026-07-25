@@ -76,6 +76,7 @@ export default function PlanPage() {
   const [redeemLoading, setRedeemLoading] = useState(false);
 
   const [planModal, setPlanModal] = useState<SubscriptionTier | null>(null);
+  const [payModal, setPayModal] = useState<{ type: 'pack' | 'plan'; name: string; price: number } | null>(null);
   const [reqLoading, setReqLoading] = useState(false);
   const [reqResult, setReqResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -142,7 +143,13 @@ export default function PlanPage() {
         {/* ═══ 一、积分套餐 ═══ */}
         <Section title="积分套餐" subtitle="一次性购买，永不过期" icon={Wallet}>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {CREDIT_PACKS.map((pack) => <CreditPackCard key={pack.name} pack={pack} />)}
+            {CREDIT_PACKS.map((pack) => (
+              <CreditPackCard
+                key={pack.name}
+                pack={pack}
+                onBuy={() => setPayModal({ type: 'pack', name: pack.name, price: pack.price })}
+              />
+            ))}
           </div>
           <div className="mt-4 p-3 rounded-[var(--radius-ks-md)] text-xs text-center" style={{ backgroundColor: 'var(--color-ks-hover)', color: 'var(--color-ks-text-secondary)' }}>
             直接兑换：<strong style={{ color: 'var(--color-ks-primary)', fontFamily: 'var(--font-family-ks-heading)' }}>1元 = 5积分</strong>
@@ -280,6 +287,76 @@ export default function PlanPage() {
 
         <div className="h-4" />
       </div>
+
+      {/* ═══ 联系/支付弹窗（积分套餐/订阅购买） ═══ */}
+      {payModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setPayModal(null)}>
+          <div className="w-full max-w-sm rounded-[var(--radius-ks-lg)] overflow-hidden" style={{ backgroundColor: 'var(--color-ks-card)', border: '1px solid var(--color-ks-border)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 text-center space-y-4">
+              <button onClick={() => setPayModal(null)} className="absolute top-3 right-3 p-1 rounded-full hover:bg-white/20 transition-colors cursor-pointer" style={{ color: 'var(--color-ks-text-muted)' }}>
+                <X size={16} />
+              </button>
+              <div className="flex items-center justify-center w-14 h-14 mx-auto rounded-full" style={{ background: 'linear-gradient(135deg, var(--color-ks-primary) 0%, var(--color-ks-secondary) 100%)' }}>
+                <QrCode size={24} style={{ color: 'white' }} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold" style={{ fontFamily: 'var(--font-family-ks-heading)', color: 'var(--color-ks-text)' }}>购买 {payModal.name}</h3>
+                <p className="text-2xl font-bold mt-1" style={{ color: 'var(--color-ks-primary)', fontFamily: 'var(--font-family-ks-heading)' }}>¥{payModal.price}</p>
+              </div>
+              <div className="flex justify-center">
+                <div className="w-40 h-40 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--color-ks-hover)', border: '1px solid var(--color-ks-border)' }}>
+                  <img
+                    src="/images/payment-qr.png"
+                    alt="支付二维码"
+                    className="w-full h-full object-contain rounded-lg"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="hidden flex-col items-center gap-0.5 text-[10px]" style={{ color: 'var(--color-ks-text-muted)' }}>
+                    <Image size={24} />
+                    <span>支付二维码</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg text-xs space-y-1" style={{ backgroundColor: 'var(--color-ks-hover)' }}>
+                <div className="flex items-center justify-center gap-2">
+                  <MessageCircle size={13} style={{ color: 'var(--color-ks-primary)' }} />
+                  <span style={{ color: 'var(--color-ks-text)' }}>微信: <strong>andyloveanny</strong></span>
+                </div>
+                <div style={{ color: 'var(--color-ks-text-muted)' }}>
+                  扫码支付后截图发给站长，确认后发放权益
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <div className="w-28 h-28 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--color-ks-hover)', border: '1px solid var(--color-ks-border)' }}>
+                  <img
+                    src="/images/wechat-qr.png"
+                    alt="站长微信二维码"
+                    className="w-full h-full object-contain rounded-lg"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="hidden flex-col items-center gap-0.5 text-[10px]" style={{ color: 'var(--color-ks-text-muted)' }}>
+                    <QrCode size={20} />
+                    <span>加微信</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setPayModal(null)}
+                className="w-full py-2 text-xs font-medium rounded-[var(--radius-ks-sm)] transition-all cursor-pointer hover:opacity-90"
+                style={{ backgroundColor: 'var(--color-ks-primary)', color: 'white', fontFamily: 'var(--font-family-ks-heading)' }}
+              >
+                我知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ 套餐详情弹窗 ═══ */}
       {planModal && (() => {
@@ -432,9 +509,13 @@ function Section({ title, subtitle, icon: Icon, children }: { title: string; sub
   );
 }
 
-function CreditPackCard({ pack }: { pack: CreditPack }) {
+function CreditPackCard({ pack, onBuy }: { pack: CreditPack; onBuy: () => void }) {
   return (
-    <div className="relative flex flex-col gap-3 p-5 rounded-[var(--radius-ks-lg)] transition-all duration-200" style={{ backgroundColor: 'var(--color-ks-card)', border: pack.popular ? '1.5px solid var(--color-ks-primary)' : '1px solid var(--color-ks-border)', boxShadow: pack.popular ? '0 4px 16px rgba(74, 111, 165, 0.12)' : '0 1px 3px var(--color-ks-shadow)' }}>
+    <div
+      className="relative flex flex-col gap-3 p-5 rounded-[var(--radius-ks-lg)] transition-all duration-200 cursor-pointer hover:-translate-y-0.5"
+      style={{ backgroundColor: 'var(--color-ks-card)', border: pack.popular ? '1.5px solid var(--color-ks-primary)' : '1px solid var(--color-ks-border)', boxShadow: pack.popular ? '0 4px 16px rgba(74, 111, 165, 0.12)' : '0 1px 3px var(--color-ks-shadow)' }}
+      onClick={onBuy}
+    >
       {pack.popular && <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-semibold tracking-wide" style={{ fontFamily: 'var(--font-family-ks-heading)', backgroundColor: 'var(--color-ks-primary)', color: 'white' }}>推荐</span>}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold" style={{ fontFamily: 'var(--font-family-ks-heading)', color: 'var(--color-ks-text)' }}>{pack.name}</h3>
